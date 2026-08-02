@@ -35,7 +35,6 @@ export type DadosPreview = {
   parcelaFinanciamento: string;
   instalacoes: InstalacaoPortfolio[];
 };
-n
 type PreviewPropostaProps = {
   dados: DadosPreview;
 };
