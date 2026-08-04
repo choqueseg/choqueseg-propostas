@@ -1,29 +1,9 @@
-import type { Metadata, Viewport } from "next";
-import RegistrarServiceWorker from "@/components/RegistrarServiceWorker";
+import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CHOQUESEG Propostas",
-  description: "Gerador de propostas de energia solar da CHOQUESEG.",
-  applicationName: "CHOQUESEG Propostas",
-  manifest: "/manifest.webmanifest",
-  icons: {
-    icon: "/imagens/logo/brasao-choqueseg.png",
-    apple: "/imagens/logo/brasao-choqueseg.png",
-  },
-  appleWebApp: {
-    capable: true,
-    title: "CHOQUESEG",
-    statusBarStyle: "black-translucent",
-  },
-};
-
-export const viewport: Viewport = {
-  themeColor: "#facc15",
-  colorScheme: "dark",
-  width: "device-width",
-  initialScale: 1,
-  viewportFit: "cover",
+  title: "CHOQUESEG PRO",
+  description: "Sistema de gestão da CHOQUESEG",
 };
 
 export default function RootLayout({
@@ -33,10 +13,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
-      <body>
-        <RegistrarServiceWorker />
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

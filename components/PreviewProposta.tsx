@@ -143,7 +143,7 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
     return (
       <div ref={ref} className="grid items-start gap-5 2xl:grid-cols-2">
         {/* PÁGINA 1 */}
-        <Pagina>
+        <Pagina numeroPagina={1} totalPaginas={3}>
           <section className="relative min-h-[315px] overflow-hidden rounded-[24px] border border-yellow-400 bg-black">
             <img
               src={TELHADO}
@@ -258,17 +258,21 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
         </Pagina>
 
         {/* PÁGINA 2 */}
-        <Pagina>
+        <Pagina numeroPagina={2} totalPaginas={3}>
           <header className="flex items-center justify-between rounded-[22px] bg-black p-5">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-400">
-                ChoqueSeg
+                CHOQUESEG
               </p>
               <h2 className="mt-1 text-3xl font-black uppercase text-white">
                 Seu investimento, seu retorno
               </h2>
             </div>
-            <img src={LOGO} alt="Brasão oficial da ChoqueSeg" className="h-auto w-[88px] object-contain" />
+            <img
+              src={LOGO}
+              alt="Brasão oficial da CHOQUESEG"
+              className="h-auto w-[88px] object-contain"
+            />
           </header>
 
           <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -284,113 +288,131 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
             <Metrica titulo="Payback" valor={payback > 0 ? `${payback.toFixed(1)} anos` : "—"} />
           </section>
 
-          <section className="mt-4 grid gap-4 sm:grid-cols-[1.12fr_0.88fr]">
-            <div className="flex h-full flex-col rounded-[22px] border border-zinc-300 bg-white p-5 text-zinc-950">
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-                O que está incluso na sua instalação
+          <section className="mt-4 rounded-[22px] border border-zinc-300 bg-white p-5 text-zinc-950">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
+              O que está incluso na sua instalação
+            </p>
+
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <ItemIncluso texto={descricaoModulo} />
+              <ItemIncluso texto={descricaoInversor || "Inversor solar"} />
+              <ItemIncluso texto="Estrutura metálica de fixação em alumínio" />
+              <ItemIncluso texto="Cabos solares CC e conectores MC4" />
+              <ItemIncluso texto="Proteção elétrica no lado CA" />
+              <ItemIncluso texto="Instalação completa do sistema fotovoltaico" />
+              <ItemIncluso texto="Projeto elétrico e documentação técnica" />
+              <ItemIncluso texto="Homologação junto à Energisa" />
+              <ItemIncluso texto="Configuração do aplicativo de monitoramento" />
+            </div>
+          </section>
+
+          <section className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-yellow-400 bg-yellow-50 p-5">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-950">
+                Observações importantes
               </p>
-
-              <div className="mt-4 grid gap-2">
-                <ItemIncluso texto={descricaoModulo} />
-                <ItemIncluso texto={descricaoInversor || "Inversor solar"} />
-                <ItemIncluso texto="Estrutura metálica de fixação em alumínio" />
-                <ItemIncluso texto="Cabos solares CC e conectores MC4" />
-                <ItemIncluso texto="Proteção elétrica no lado CA" />
-                <ItemIncluso texto="Instalação completa do sistema fotovoltaico" />
-                <ItemIncluso texto="Projeto elétrico e documentação técnica" />
-                <ItemIncluso texto="Homologação junto à Energisa" />
-                <ItemIncluso texto="Configuração do aplicativo de monitoramento" />
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-yellow-400 bg-yellow-50 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-950">
-                  Observações importantes
-                </p>
-                <p className="mt-2 text-sm font-bold leading-relaxed text-zinc-700">
-                  Padrão de entrada, adequações na instalação elétrica interna da residência
-                  e eventuais correções estruturais no telhado não estão inclusos nesta proposta
-                  e são de responsabilidade do cliente.
-                </p>
-              </div>
-
-              <div className="mt-4 flex-1 rounded-2xl bg-zinc-950 p-4 text-white">
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-yellow-400">
-                  Etapas do seu projeto
-                </p>
-                <div className="mt-3 space-y-3">
-                  <EtapaProjeto numero="1" texto="Análise técnica e definição do sistema" />
-                  <EtapaProjeto numero="2" texto="Projeto elétrico e documentação" />
-                  <EtapaProjeto numero="3" texto="Homologação junto à Energisa" />
-                  <EtapaProjeto numero="4" texto="Instalação e configuração do monitoramento" />
-                  <EtapaProjeto numero="5" texto="Entrega técnica e suporte pós-instalação" />
-                </div>
-              </div>
+              <p className="mt-3 text-sm font-bold leading-relaxed text-zinc-700">
+                Padrão de entrada, adequações na instalação elétrica interna da residência
+                e eventuais correções estruturais no telhado não estão inclusos nesta proposta
+                e são de responsabilidade do cliente.
+              </p>
             </div>
 
-            <div className="rounded-[22px] border border-yellow-400 bg-black p-3">
-              <p className="mb-3 text-center text-sm font-black uppercase tracking-[0.12em] text-white">
-                Algumas instalações
-                <span className="block text-yellow-400">realizadas pela CHOQUESEG</span>
+            <div className="rounded-2xl bg-zinc-950 p-5 text-white">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-yellow-400">
+                Etapas do seu projeto
               </p>
+              <div className="mt-4 space-y-3">
+                <EtapaProjeto numero="1" texto="Análise técnica e definição do sistema" />
+                <EtapaProjeto numero="2" texto="Projeto elétrico e documentação" />
+                <EtapaProjeto numero="3" texto="Homologação junto à Energisa" />
+                <EtapaProjeto numero="4" texto="Instalação e configuração do monitoramento" />
+                <EtapaProjeto numero="5" texto="Entrega técnica e suporte pós-instalação" />
+              </div>
+            </div>
+          </section>
 
-              <div className="space-y-3">
-                {dados.instalacoes.slice(0, 4).map((instalacao, indice) => (
-                  <figure
-                    key={`${indice}-${instalacao.foto}-${instalacao.cidade || "Local da instalação"}`}
-                    className="overflow-hidden rounded-xl border border-yellow-400 bg-zinc-950"
-                  >
-                    <div className="aspect-[16/7] w-full overflow-hidden bg-zinc-900">
-                      {instalacao.foto ? (
-                        <>
-                          <img
-                            src={instalacao.foto}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            onError={(evento) => {
-                              evento.currentTarget.style.display = "none";
-                              const substituto = evento.currentTarget.nextElementSibling as HTMLElement | null;
-                              if (substituto) substituto.style.display = "flex";
-                            }}
-                          />
-                          <div className="hidden h-full items-center justify-center px-4 text-center text-xs font-black uppercase text-zinc-500">
-                            Foto não encontrada. Escolha outra imagem no gerador.
-                          </div>
-                        </>
-                      ) : (
-                        <div className="flex h-full items-center justify-center px-4 text-center text-xs font-black uppercase text-zinc-500">
-                          Adicione uma foto desta instalação no gerador
+          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-black p-5 text-center">
+            <p className="text-sm font-black uppercase tracking-[0.18em] text-white">
+              Projeto completo, instalação profissional e acompanhamento técnico
+            </p>
+            <p className="mt-2 text-2xl font-black uppercase text-yellow-400">
+              Do orçamento à homologação
+            </p>
+          </section>
+        </Pagina>
+
+        {/* PÁGINA 3 */}
+        <Pagina numeroPagina={3} totalPaginas={3}>
+          <header className="flex items-center justify-between rounded-[22px] bg-black p-5">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-400">
+                CHOQUESEG
+              </p>
+              <h2 className="mt-1 text-3xl font-black uppercase text-white">
+                Qualidade que você pode comprovar
+              </h2>
+            </div>
+            <img
+              src={LOGO}
+              alt="Brasão oficial da CHOQUESEG"
+              className="h-auto w-[88px] object-contain"
+            />
+          </header>
+
+          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-black p-4">
+            <p className="mb-4 text-center text-sm font-black uppercase tracking-[0.12em] text-white">
+              Algumas instalações
+              <span className="block text-yellow-400">realizadas pela CHOQUESEG</span>
+            </p>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {dados.instalacoes.slice(0, 4).map((instalacao, indice) => (
+                <figure
+                  key={`${indice}-${instalacao.foto}-${instalacao.cidade || "Local da instalação"}`}
+                  className="overflow-hidden rounded-xl border border-yellow-400 bg-zinc-950"
+                >
+                  <div className="aspect-[16/9] w-full overflow-hidden bg-zinc-900">
+                    {instalacao.foto ? (
+                      <>
+                        <img
+                          src={instalacao.foto}
+                          alt=""
+                          className="h-full w-full object-cover object-center"
+                          onError={(evento) => {
+                            evento.currentTarget.style.display = "none";
+                            const substituto =
+                              evento.currentTarget.nextElementSibling as HTMLElement | null;
+                            if (substituto) substituto.style.display = "flex";
+                          }}
+                        />
+                        <div className="hidden h-full items-center justify-center px-4 text-center text-xs font-black uppercase text-zinc-500">
+                          Foto não encontrada. Escolha outra imagem no gerador.
                         </div>
-                      )}
-                    </div>
-
-                    <figcaption className="flex items-start gap-2 border-t border-yellow-400 bg-black px-3 py-2.5">
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-400 text-sm font-black text-black">
-                        ●
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-black leading-tight text-white">
-                          {instalacao.cidade || "Local da instalação"}
-                        </p>
-                        <p className="mt-0.5 text-xs font-bold leading-tight text-yellow-400">
-                          {instalacao.descricao || "Sistema fotovoltaico instalado pela CHOQUESEG"}
-                        </p>
+                      </>
+                    ) : (
+                      <div className="flex h-full items-center justify-center px-4 text-center text-xs font-black uppercase text-zinc-500">
+                        Adicione uma foto desta instalação no gerador
                       </div>
-                    </figcaption>
-                  </figure>
-                ))}
-              </div>
+                    )}
+                  </div>
 
-              <div className="mt-4 border-t border-yellow-400 pt-4 text-center">
-                <img
-                  src={LOGO}
-                  alt="Brasão oficial da CHOQUESEG"
-                  className="mx-auto h-auto w-[76px] object-contain"
-                />
-                <p className="mt-2 text-base font-black uppercase leading-tight text-white">
-                  Instalação profissional e
-                  <span className="block text-yellow-400">acompanhamento completo</span>
-                </p>
-              </div>
+                  <figcaption className="flex items-start gap-2 border-t border-yellow-400 bg-black px-3 py-2.5">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-400 text-sm font-black text-black">
+                      ●
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-black leading-tight text-white">
+                        {instalacao.cidade || "Local da instalação"}
+                      </p>
+                      <p className="mt-0.5 text-xs font-bold leading-tight text-yellow-400">
+                        {instalacao.descricao ||
+                          "Sistema fotovoltaico instalado pela CHOQUESEG"}
+                      </p>
+                    </div>
+                  </figcaption>
+                </figure>
+              ))}
             </div>
           </section>
 
@@ -416,7 +438,7 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <h3 className="text-xl font-black uppercase text-yellow-400">
-                  Por que escolher a ChoqueSeg
+                  Por que escolher a CHOQUESEG
                 </h3>
                 <div className="mt-3 space-y-3">
                   <Diferencial texto="Projeto, instalação e homologação completa" />
@@ -453,7 +475,11 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
                 (79) 9.9939-0653 • @choqueseg
               </p>
             </div>
-            <img src={LOGO} alt="Brasão oficial da ChoqueSeg" className="h-auto w-[92px] shrink-0 object-contain" />
+            <img
+              src={LOGO}
+              alt="Brasão oficial da CHOQUESEG"
+              className="h-auto w-[92px] shrink-0 object-contain"
+            />
           </footer>
         </Pagina>
       </div>
@@ -463,13 +489,29 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
 
 export default PreviewProposta;
 
-function Pagina({ children }: { children: React.ReactNode }) {
+function Pagina({
+  children,
+  numeroPagina,
+  totalPaginas,
+}: {
+  children: React.ReactNode;
+  numeroPagina?: number;
+  totalPaginas?: number;
+}) {
   return (
     <article
       data-pagina-proposta
-      className="min-h-[1120px] w-full overflow-hidden rounded-[28px] border border-yellow-400 bg-zinc-100 p-4 shadow-2xl sm:p-5"
+      className="relative min-h-[1120px] w-full overflow-hidden rounded-[28px] border border-yellow-400 bg-zinc-100 p-6 shadow-2xl"
     >
-      {children}
+      <div className="min-h-[1030px]">
+        {children}
+      </div>
+
+      {numeroPagina && totalPaginas && (
+        <footer className="absolute bottom-4 left-0 right-0 text-center text-xs font-bold text-zinc-500">
+          Página {numeroPagina} de {totalPaginas}
+        </footer>
+      )}
     </article>
   );
 }

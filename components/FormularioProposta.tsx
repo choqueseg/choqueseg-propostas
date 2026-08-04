@@ -121,13 +121,27 @@ function dinheiro(valor: number) {
 
 async function esperarImagens(elemento: HTMLElement) {
   const imagens = Array.from(elemento.querySelectorAll("img"));
-  await Promise.all(imagens.map((imagem) => {
-    if (imagem.complete && imagem.naturalWidth > 0) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      imagem.addEventListener("load", () => resolve(), { once: true });
-      imagem.addEventListener("error", () => resolve(), { once: true });
-    });
-  }));
+
+  await Promise.all(
+    imagens.map(
+      (imagem) =>
+        new Promise<void>((resolve) => {
+          // Mesmo que a imagem tenha falhado, não deixa o PDF travado.
+          if (imagem.complete) {
+            resolve();
+            return;
+          }
+
+          const finalizar = () => resolve();
+
+          imagem.addEventListener("load", finalizar, { once: true });
+          imagem.addEventListener("error", finalizar, { once: true });
+
+          // Segurança: libera a geração após 5 segundos.
+          setTimeout(finalizar, 5000);
+        }),
+    ),
+  );
 }
 
 export default function FormularioProposta() {
@@ -285,43 +299,104 @@ export default function FormularioProposta() {
     instalacoes,
   };
 
-  async function gerarPDF() {
-    const raiz = previewRef.current;
-    if (!raiz) return alert("Não foi possível localizar as páginas da proposta.");
-    try {
-      setGerandoPDF(true);
-      await esperarImagens(raiz);
-      await document.fonts.ready;
-      const paginas = Array.from(raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"));
-      if (paginas.length !== 2) return alert("A proposta precisa ter exatamente duas páginas.");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      for (let indice = 0; indice < paginas.length; indice += 1) {
-        await new Promise<void>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-        );
+ async function gerarPDF() {
+  const raiz = previewRef.current;
 
-        const canvas = await html2canvas(paginas[indice], {
-          scale: window.innerWidth < 768 ? 1.45 : 1.75,
-          useCORS: true,
-          allowTaint: false,
-          backgroundColor: "#000000",
-          logging: false,
-          imageTimeout: 10000,
-          removeContainer: true,
-        });
-        const imagem = canvas.toDataURL("image/jpeg", 0.84);
-        if (indice > 0) pdf.addPage();
-        pdf.addImage(imagem, "JPEG", 0, 0, 210, 297, undefined, "FAST");
-      }
-      const nomeCliente = formulario.nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
-      pdf.save(`Proposta-ChoqueSeg-${nomeCliente}.pdf`);
-    } catch (erro) {
-      console.error("Erro ao gerar PDF:", erro);
-      alert("Não foi possível gerar o PDF. Verifique o Console do navegador.");
-    } finally {
-      setGerandoPDF(false);
-    }
+  if (!raiz) {
+    alert("Não foi possível localizar a proposta.");
+    return;
   }
+
+  try {
+    setGerandoPDF(true);
+
+    const paginas = Array.from(
+      raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
+    );
+
+    if (paginas.length === 0) {
+      alert("Nenhuma página da proposta foi encontrada.");
+      return;
+    }
+
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
+
+    for (let indice = 0; indice < paginas.length; indice += 1) {
+      const pagina = paginas[indice];
+
+      console.log(`Iniciando página ${indice + 1}`);
+
+      const captura = html2canvas(pagina, {
+        scale: 0.8,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#000000",
+        logging: true,
+        imageTimeout: 5000,
+        removeContainer: true,
+      });
+
+      const limiteTempo = new Promise<never>((_, rejeitar) => {
+        setTimeout(() => {
+          rejeitar(
+            new Error(
+              `A página ${indice + 1} demorou mais de 20 segundos para ser processada.`,
+            ),
+          );
+        }, 20000);
+      });
+
+      const canvas = await Promise.race([captura, limiteTempo]);
+
+      console.log(`Página ${indice + 1} capturada`);
+
+      const imagem = canvas.toDataURL("image/jpeg", 0.6);
+
+      if (indice > 0) {
+        pdf.addPage();
+      }
+
+      pdf.addImage(
+        imagem,
+        "JPEG",
+        0,
+        0,
+        210,
+        297,
+        undefined,
+        "FAST",
+      );
+
+      canvas.width = 1;
+      canvas.height = 1;
+    }
+
+    const nomeCliente =
+      formulario.nome
+        .trim()
+        .replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+
+    pdf.save(`Proposta-CHOQUESEG-${nomeCliente}.pdf`);
+
+    alert("PDF gerado com sucesso.");
+  } catch (erro) {
+    console.error("Erro detalhado ao gerar PDF:", erro);
+
+    alert(
+      erro instanceof Error
+        ? erro.message
+        : "Ocorreu um erro desconhecido ao gerar o PDF.",
+    );
+  } finally {
+    setGerandoPDF(false);
+  }
+ }
+   
 
   function abrirWhatsApp() {
     const telefone = formulario.telefone.replace(/\D/g, "");
