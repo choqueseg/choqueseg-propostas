@@ -38,6 +38,7 @@ export type DadosPreview = {
 
 type PreviewPropostaProps = {
   dados: DadosPreview;
+  modo?: "normal" | "celular";
 };
 
 const LOGO = "/imagens/logo/brasao-choqueseg.png";
@@ -84,7 +85,7 @@ function textoSeguro(...partes: Array<string | undefined | null>) {
 }
 
 const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
-  function PreviewProposta({ dados }, ref) {
+  function PreviewProposta({ dados, modo = "normal" }, ref) {
     const consumo = Math.max(numero(dados.consumo), 0);
     const geracaoMedia = Math.max(numero(dados.geracao), 0);
     const contaAtual = Math.max(numero(dados.valorConta), 0);
@@ -155,7 +156,13 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
     )}`;
 
     return (
-      <div ref={ref} className="grid items-start gap-5 2xl:grid-cols-2">
+      <div
+        ref={ref}
+        data-modo-proposta={modo}
+        className={`grid items-start gap-5 ${
+          modo === "celular" ? "mx-auto max-w-[430px] grid-cols-1" : "2xl:grid-cols-2"
+        }`}
+      >
         {/* PÁGINA 1 */}
         <Pagina numeroPagina={1} totalPaginas={3}>
           <section className="relative min-h-[315px] overflow-hidden rounded-[24px] border border-yellow-400 bg-black">
@@ -526,9 +533,9 @@ function Pagina({
   return (
     <article
       data-pagina-proposta
-      className="relative min-h-[1120px] w-full overflow-hidden rounded-[28px] border border-yellow-400 bg-zinc-100 p-6 shadow-2xl"
+      className="relative min-h-[1120px] w-full overflow-hidden rounded-[28px] border border-yellow-400 bg-zinc-100 p-6 shadow-2xl [[data-modo-proposta=celular]_&]:min-h-[760px] [[data-modo-proposta=celular]_&]:rounded-[22px] [[data-modo-proposta=celular]_&]:p-4"
     >
-      <div className="min-h-[1030px]">
+      <div className="min-h-[1030px] [[data-modo-proposta=celular]_&]:min-h-[700px]">
         {children}
       </div>
 

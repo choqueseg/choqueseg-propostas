@@ -154,12 +154,14 @@ async function esperarImagens(elemento: HTMLElement) {
 export default function FormularioProposta() {
   const [formulario, setFormulario] = useState<Formulario>(formularioInicial);
   const [gerandoPDF, setGerandoPDF] = useState(false);
+  const [gerandoPDFCelular, setGerandoPDFCelular] = useState(false);
   const [processandoFoto, setProcessandoFoto] = useState<number | null>(null);
   const [instalacoes, setInstalacoes] = useState<InstalacaoPortfolio[]>(instalacoesIniciais);
   const [modulos, setModulos] = useState<Equipamento[]>(modulosPadrao);
   const [inversores, setInversores] = useState<Equipamento[]>(inversoresPadrao);
   const [microinversores, setMicroinversores] = useState<Equipamento[]>(microinversoresPadrao);
   const previewRef = useRef<HTMLDivElement>(null);
+  const previewCelularRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -403,6 +405,77 @@ export default function FormularioProposta() {
     setGerandoPDF(false);
   }
  }
+
+  async function gerarPDFCelular() {
+    const raiz = previewCelularRef.current;
+    if (!raiz) {
+      alert("Não foi possível localizar a proposta para celular.");
+      return;
+    }
+
+    try {
+      setGerandoPDFCelular(true);
+      const paginas = Array.from(
+        raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
+      );
+
+      if (paginas.length === 0) {
+        alert("Nenhuma página da proposta para celular foi encontrada.");
+        return;
+      }
+
+      const larguraPdf = 108;
+      const alturaPdf = 192;
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: [larguraPdf, alturaPdf],
+        compress: true,
+      });
+
+      for (let indice = 0; indice < paginas.length; indice += 1) {
+        const pagina = paginas[indice];
+        await esperarImagens(pagina);
+
+        const canvas = await html2canvas(pagina, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#ffffff",
+          logging: false,
+          imageTimeout: 5000,
+          removeContainer: true,
+        });
+
+        const imagem = canvas.toDataURL("image/jpeg", 0.9);
+        if (indice > 0) pdf.addPage([larguraPdf, alturaPdf], "portrait");
+
+        pdf.addImage(
+          imagem, "JPEG", 0, 0, larguraPdf, alturaPdf, undefined, "FAST",
+        );
+
+        canvas.width = 1;
+        canvas.height = 1;
+      }
+
+      const nomeCliente =
+        formulario.nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+
+      pdf.save(`Proposta-CHOQUESEG-Celular-${nomeCliente}.pdf`);
+      alert("PDF para celular gerado com sucesso.");
+    } catch (erro) {
+      console.error("Erro ao gerar PDF para celular:", erro);
+      alert(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível gerar o PDF para celular.",
+      );
+    } finally {
+      setGerandoPDFCelular(false);
+    }
+  }
+
+
    
 
   function abrirWhatsApp() {
@@ -419,6 +492,7 @@ export default function FormularioProposta() {
           <div><p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-400">ChoqueSeg</p><h1 className="text-lg font-black uppercase md:text-2xl">Gerador de proposta solar</h1></div>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={gerarPDF} disabled={gerandoPDF} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Gerando PDF..." : "Gerar PDF"}</button>
+            <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDFCelular} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
             <button type="button" onClick={abrirWhatsApp} className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white">Abrir WhatsApp</button>
             <button type="button" onClick={() => { setFormulario(formularioInicial); setInstalacoes(instalacoesIniciais); }} className="rounded-xl border border-zinc-600 px-4 py-3 text-sm font-black uppercase text-white">Limpar</button>
           </div>
@@ -533,6 +607,9 @@ export default function FormularioProposta() {
           </div>
         </aside>
         <section className="min-w-0"><PreviewProposta ref={previewRef} dados={dadosPreview} /></section>
+        <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[430px]">
+          <PreviewProposta ref={previewCelularRef} dados={dadosPreview} modo="celular" />
+        </div>
       </div>
     </main>
   );
