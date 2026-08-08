@@ -4,12 +4,22 @@ import { FormEvent, useEffect, useState } from "react";
 import FormularioProposta from "@/components/FormularioProposta";
 import SeletorTipoProposta from "@/components/SeletorTipoProposta";
 import FormularioSeguranca from "@/components/FormularioSeguranca";
+import FormularioEletrica from "@/components/FormularioEletrica";
 import CadastroProdutos from "@/components/CadastroProdutos";
 import ClientesModule from "@/modules/clientes/ClientesModule";
 import FunilModule from "@/modules/funil/FunilModule";
 import DashboardModule from "@/modules/dashboard/DashboardModule";
 import AgendaModule from "@/modules/agenda/AgendaModule";
-type PerfilUsuario = "administrador" | "funcionario";
+import FuncionariosModule from "@/modules/funcionarios/FuncionariosModule";
+import FinanceiroModule from "@/modules/financeiro/FinanceiroModule";
+import EstoqueModule from "@/modules/estoque/EstoqueModule";
+import FormularioAutomacao from "@/components/FormularioAutomacao";
+type PerfilUsuario =
+  | "administrador"
+  | "vendedor"
+  | "tecnico"
+  | "atendente"
+  | "funcionario"; // compatibilidade com sessões antigas
 
 type UsuarioLogado = {
   nome: string;
@@ -27,7 +37,9 @@ type TelaSistema =
   | "clientes"
   | "funil"
   | "agenda"
-  | "funcionarios";
+  | "financeiro"
+  | "funcionarios"
+  | "estoque";
 
 type TipoProposta =
   | "energia-solar"
@@ -39,7 +51,8 @@ type TipoProposta =
 const CHAVE_SESSAO = "choqueseg-pro-sessao";
 
 export default function Home() {
-  const [carregando, setCarregando] = useState(true);
+  
+  const [carregando, setCarregando] = useState(false);
   const [usuarioLogado, setUsuarioLogado] =
     useState<UsuarioLogado | null>(null);
 
@@ -51,59 +64,135 @@ export default function Home() {
     useState<TelaSistema>("dashboard");
 
   useEffect(() => {
+  try {
     const sessaoSalva = localStorage.getItem(CHAVE_SESSAO);
 
     if (sessaoSalva) {
       try {
         const sessao = JSON.parse(sessaoSalva) as UsuarioLogado;
-        setUsuarioLogado(sessao);
+
+        const perfilRestaurado: PerfilUsuario =
+          sessao.perfil === "administrador" ||
+          sessao.perfil === "vendedor" ||
+          sessao.perfil === "tecnico" ||
+          sessao.perfil === "atendente" ||
+          sessao.perfil === "funcionario"
+            ? sessao.perfil
+            : "funcionario";
+
+        const sessaoNormalizada: UsuarioLogado = {
+          ...sessao,
+          perfil: perfilRestaurado,
+        };
+
+        setUsuarioLogado(sessaoNormalizada);
+
+        if (perfilRestaurado === "administrador") {
+          setTelaAtual("dashboard");
+        } else if (perfilRestaurado === "vendedor") {
+          setTelaAtual("clientes");
+        } else if (perfilRestaurado === "atendente") {
+          setTelaAtual("agenda");
+        } else {
+          setTelaAtual("agenda");
+        }
       } catch {
         localStorage.removeItem(CHAVE_SESSAO);
+        setUsuarioLogado(null);
       }
     }
-
+  } catch (erro) {
+    console.error("Erro ao carregar sessão:", erro);
+    setUsuarioLogado(null);
+  } finally {
     setCarregando(false);
-  }, []);
-
-  function entrar(evento: FormEvent<HTMLFormElement>) {
-    evento.preventDefault();
-    setErroLogin("");
-
-    const usuarioDigitado = usuario.trim().toLowerCase();
-
-    if (usuarioDigitado === "admin" && senha === "1234") {
-      const sessao: UsuarioLogado = {
-        nome: "Administrador CHOQUESEG",
-        perfil: "administrador",
-      };
-
-      localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
-      setUsuarioLogado(sessao);
-      setTelaAtual("dashboard");
-      setUsuario("");
-      setSenha("");
-      return;
-    }
-
-    if (
-      usuarioDigitado === "funcionario" &&
-      senha === "1234"
-    ) {
-      const sessao: UsuarioLogado = {
-        nome: "Funcionário CHOQUESEG",
-        perfil: "funcionario",
-      };
-
-      localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
-      setUsuarioLogado(sessao);
-      setTelaAtual("agenda");
-      setUsuario("");
-      setSenha("");
-      return;
-    }
-
-    setErroLogin("Usuário ou senha inválidos.");
   }
+}, []);
+ function entrar(evento: FormEvent<HTMLFormElement>) {
+  evento.preventDefault();
+  setErroLogin("");
+
+  const usuarioDigitado = usuario.trim().toLowerCase();
+
+  // Login principal do administrador
+  if (usuarioDigitado === "admin" && senha === "1234") {
+    const sessao: UsuarioLogado = {
+      nome: "Administrador CHOQUESEG",
+      perfil: "administrador",
+    };
+
+    localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
+    setUsuarioLogado(sessao);
+    setTelaAtual("dashboard");
+    setUsuario("");
+    setSenha("");
+    return;
+  }
+
+  // Login dos funcionários cadastrados
+  const dadosFuncionarios = localStorage.getItem(
+    "choqueseg-funcionarios"
+  );
+
+  if (dadosFuncionarios) {
+    try {
+      const funcionarios = JSON.parse(dadosFuncionarios);
+
+      const funcionarioEncontrado = funcionarios.find(
+        (funcionario: {
+          nome: string;
+          usuario: string;
+          senha: string;
+          perfil?: "administrador" | "vendedor" | "tecnico" | "atendente";
+          nivelAcesso?: string;
+          status: "Ativo" | "Inativo";
+        }) =>
+          funcionario.usuario?.trim().toLowerCase() ===
+            usuarioDigitado &&
+          funcionario.senha === senha
+      );
+
+      if (funcionarioEncontrado) {
+        if (funcionarioEncontrado.status !== "Ativo") {
+          setErroLogin("Este funcionário está inativo.");
+          return;
+        }
+
+        const perfilFuncionario: PerfilUsuario =
+          funcionarioEncontrado.perfil === "administrador" ||
+          funcionarioEncontrado.perfil === "vendedor" ||
+          funcionarioEncontrado.perfil === "tecnico" ||
+          funcionarioEncontrado.perfil === "atendente"
+            ? funcionarioEncontrado.perfil
+            : "tecnico";
+
+        const sessao: UsuarioLogado = {
+          nome: funcionarioEncontrado.nome,
+          perfil: perfilFuncionario,
+        };
+
+        localStorage.setItem(
+          CHAVE_SESSAO,
+          JSON.stringify(sessao)
+        );
+
+        setUsuarioLogado(sessao);
+        setTelaAtual("agenda");
+        setUsuario("");
+        setSenha("");
+        return;
+      }
+    } catch {
+      setErroLogin(
+        "Não foi possível acessar os funcionários cadastrados."
+      );
+      return;
+    }
+  }
+
+  setErroLogin("Usuário ou senha inválidos.");
+}
+
 
   function sair() {
     localStorage.removeItem(CHAVE_SESSAO);
@@ -111,13 +200,14 @@ export default function Home() {
     setTelaAtual("dashboard");
     setUsuario("");
     setSenha("");
+    setErroLogin("");
   }
 
   if (carregando) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-yellow-400">
         <p className="text-lg font-black uppercase">
-          Carregando CHOQUESEG PRO...
+           CHOQUESEG PRO...
         </p>
       </main>
     );
@@ -203,8 +293,7 @@ export default function Home() {
             </p>
 
             <p className="mt-1">
-              Funcionário: <strong>funcionario</strong> / senha{" "}
-              <strong>1234</strong>
+              Funcionários entram com o usuário e a senha cadastrados.
             </p>
           </div>
         </div>
@@ -212,8 +301,24 @@ export default function Home() {
     );
   }
 
-  const ehAdministrador =
-    usuarioLogado.perfil === "administrador";
+  const ehAdministrador = usuarioLogado.perfil === "administrador";
+  const ehVendedor = usuarioLogado.perfil === "vendedor";
+  const ehAtendente = usuarioLogado.perfil === "atendente";
+  const ehTecnico =
+    usuarioLogado.perfil === "tecnico" ||
+    usuarioLogado.perfil === "funcionario";
+
+  const podeClientes = ehAdministrador || ehVendedor || ehAtendente;
+  const podeFunil = ehAdministrador || ehVendedor || ehAtendente;
+  const podePropostas = ehAdministrador || ehVendedor;
+  const podeAgenda = ehAdministrador || ehVendedor || ehAtendente || ehTecnico;
+
+  // AgendaModule ainda trabalha com administrador/funcionario.
+  // Vendedor e atendente precisam poder criar e gerenciar agendamentos.
+  const perfilAgenda: "administrador" | "funcionario" =
+    ehAdministrador || ehVendedor || ehAtendente
+      ? "administrador"
+      : "funcionario";
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white">
@@ -252,7 +357,7 @@ export default function Home() {
           <MenuLateral
             telaAtual={telaAtual}
             alterarTela={setTelaAtual}
-            ehAdministrador={ehAdministrador}
+            perfil={usuarioLogado.perfil}
           />
         </aside>
 
@@ -261,7 +366,7 @@ export default function Home() {
             <MenuMobile
               telaAtual={telaAtual}
               alterarTela={setTelaAtual}
-              ehAdministrador={ehAdministrador}
+              perfil={usuarioLogado.perfil}
             />
           </div>
 
@@ -269,25 +374,33 @@ export default function Home() {
   <DashboardModule alterarTela={setTelaAtual} />
 )}
 
-         {telaAtual === "clientes" && ehAdministrador && (
+         {telaAtual === "clientes" && podeClientes && (
            <ClientesModule />
           )}
-          {telaAtual === "funil" && ehAdministrador && (
+          {telaAtual === "funil" && podeFunil && (
   <FunilModule />
 )}
 
-          {telaAtual === "agenda" && (
-  <AgendaModule perfil={usuarioLogado.perfil} />
-)}
-
-          {telaAtual === "funcionarios" && ehAdministrador && (
-            <ModuloEmConstrucao
-              titulo="Funcionários"
-              descricao="Aqui serão cadastrados funcionários, permissões e equipes responsáveis pelos serviços."
+          {telaAtual === "agenda" && podeAgenda && (
+            <AgendaModule
+              perfil={perfilAgenda}
+              usuarioNome={usuarioLogado.nome}
             />
           )}
 
-          {telaAtual === "propostas" && ehAdministrador && (
+          {telaAtual === "financeiro" && ehAdministrador && (
+            <FinanceiroModule usuarioNome={usuarioLogado.nome} />
+          )}
+
+          {telaAtual === "estoque" && ehAdministrador && (
+            <EstoqueModule />
+          )}
+
+          {telaAtual === "funcionarios" && ehAdministrador && (
+            <FuncionariosModule />
+          )}
+
+          {telaAtual === "propostas" && podePropostas && (
             <SeletorTipoProposta
               aoSelecionar={(tipo) => {
                 setTelaAtual(tipo as TipoProposta);
@@ -295,7 +408,7 @@ export default function Home() {
             />
           )}
 
-          {telaAtual === "energia-solar" && ehAdministrador && (
+          {telaAtual === "energia-solar" && podePropostas && (
             <ModuloComVoltar
               voltar={() => setTelaAtual("propostas")}
             >
@@ -304,13 +417,21 @@ export default function Home() {
           )}
 
           {telaAtual === "seguranca-eletronica" &&
-            ehAdministrador && (
+            podePropostas && (
               <ModuloComVoltar
                 voltar={() => setTelaAtual("propostas")}
               >
                 <FormularioSeguranca />
               </ModuloComVoltar>
             )}
+
+          {telaAtual === "eletrica" && podePropostas && (
+            <ModuloComVoltar
+              voltar={() => setTelaAtual("propostas")}
+            >
+              <FormularioEletrica />
+            </ModuloComVoltar>
+          )}
 
           {telaAtual === "cadastro-produtos" &&
             ehAdministrador && (
@@ -321,18 +442,14 @@ export default function Home() {
               </ModuloComVoltar>
             )}
 
-          {(telaAtual === "eletrica" ||
-            telaAtual === "automacao") &&
-            ehAdministrador && (
-              <ModuloEmConstrucao
-                titulo={
-                  telaAtual === "eletrica"
-                    ? "Propostas de elétrica"
-                    : "Propostas de automação"
-                }
-                descricao="Este módulo será desenvolvido mantendo o mesmo padrão profissional das propostas da CHOQUESEG."
-              />
-            )}
+          {telaAtual === "automacao" && podePropostas && (
+  <ModuloComVoltar
+    voltar={() => setTelaAtual("propostas")}
+  >
+    <FormularioAutomacao />
+  </ModuloComVoltar>
+)}
+
         </main>
       </div>
     </div>
@@ -342,11 +459,11 @@ export default function Home() {
 function MenuLateral({
   telaAtual,
   alterarTela,
-  ehAdministrador,
+  perfil,
 }: {
   telaAtual: TelaSistema;
   alterarTela: (tela: TelaSistema) => void;
-  ehAdministrador: boolean;
+  perfil: PerfilUsuario;
 }) {
   const itensAdministrador: Array<{
     tela: TelaSistema;
@@ -357,19 +474,47 @@ function MenuLateral({
     { tela: "clientes", nome: "Clientes", icone: "👥" },
     { tela: "funil", nome: "Funil", icone: "📊" },
     { tela: "agenda", nome: "Agenda", icone: "📅" },
+    { tela: "financeiro", nome: "Financeiro", icone: "💰" },
     { tela: "propostas", nome: "Propostas", icone: "📄" },
     { tela: "funcionarios", nome: "Funcionários", icone: "👷" },
+    { tela: "estoque", nome: "Estoque", icone: "📦" },
   ];
 
-  const itensFuncionario: Array<{
+  const itensVendedor: Array<{
+    tela: TelaSistema;
+    nome: string;
+    icone: string;
+  }> = [
+    { tela: "clientes", nome: "Clientes", icone: "👥" },
+    { tela: "funil", nome: "Funil", icone: "📊" },
+    { tela: "propostas", nome: "Propostas", icone: "📄" },
+    { tela: "agenda", nome: "Agenda", icone: "📅" },
+  ];
+
+  const itensAtendente: Array<{
+    tela: TelaSistema;
+    nome: string;
+    icone: string;
+  }> = [
+    { tela: "clientes", nome: "Clientes", icone: "👥" },
+    { tela: "funil", nome: "Funil", icone: "📊" },
+    { tela: "agenda", nome: "Agenda", icone: "📅" },
+  ];
+
+  const itensTecnico: Array<{
     tela: TelaSistema;
     nome: string;
     icone: string;
   }> = [{ tela: "agenda", nome: "Minha agenda", icone: "📅" }];
 
-  const itens = ehAdministrador
-    ? itensAdministrador
-    : itensFuncionario;
+  const itens =
+    perfil === "administrador"
+      ? itensAdministrador
+      : perfil === "vendedor"
+        ? itensVendedor
+        : perfil === "atendente"
+          ? itensAtendente
+          : itensTecnico;
 
   return (
     <nav className="space-y-2">
@@ -395,22 +540,38 @@ function MenuLateral({
 function MenuMobile({
   telaAtual,
   alterarTela,
-  ehAdministrador,
+  perfil,
 }: {
   telaAtual: TelaSistema;
   alterarTela: (tela: TelaSistema) => void;
-  ehAdministrador: boolean;
+  perfil: PerfilUsuario;
 }) {
-  const opcoes = ehAdministrador
-    ? [
-        ["dashboard", "Dashboard"],
-        ["clientes", "Clientes"],
-        ["funil", "Funil"],
-        ["agenda", "Agenda"],
-        ["propostas", "Propostas"],
-        ["funcionarios", "Funcionários"],
-      ]
-    : [["agenda", "Minha agenda"]];
+  const opcoes: Array<[TelaSistema, string]> =
+    perfil === "administrador"
+      ? [
+          ["dashboard", "Dashboard"],
+          ["clientes", "Clientes"],
+          ["funil", "Funil"],
+          ["agenda", "Agenda"],
+          ["financeiro", "Financeiro"],
+          ["estoque", "Estoque"],
+          ["propostas", "Propostas"],
+          ["funcionarios", "Funcionários"],
+        ]
+      : perfil === "vendedor"
+        ? [
+            ["clientes", "Clientes"],
+            ["funil", "Funil"],
+            ["propostas", "Propostas"],
+            ["agenda", "Agenda"],
+          ]
+        : perfil === "atendente"
+          ? [
+              ["clientes", "Clientes"],
+              ["funil", "Funil"],
+              ["agenda", "Agenda"],
+            ]
+          : [["agenda", "Minha agenda"]];
 
   return (
     <select

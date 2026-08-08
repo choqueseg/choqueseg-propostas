@@ -1,41 +1,23 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-
-type PerfilUsuario = "administrador" | "funcionario";
-
-type Cliente = {
-  id: string;
-  nome: string;
-  telefone: string;
-  cidade: string;
-  endereco: string;
-  tipoServico: string;
-};
-
-type Servico = {
-  id: string;
-  clienteId: string;
-  clienteNome: string;
-  tipoServico: string;
-  data: string;
-  horario: string;
-  endereco: string;
-  cidade: string;
-  equipe: string;
-  descricao: string;
-  status: "Agendado" | "Em execução" | "Concluído";
-};
+import CardServico from "./CardServico";
+import ModalServico from "./ModalServico";
+import { Cliente, Funcionario, PerfilUsuario, Servico } from "./types";
 
 const CHAVE_CLIENTES = "choqueseg-pro-clientes";
 const CHAVE_AGENDA = "choqueseg-pro-agenda";
+const CHAVE_FUNCIONARIOS = "choqueseg-funcionarios";
 
 export default function AgendaModule({
   perfil,
+  usuarioNome,
 }: {
   perfil: PerfilUsuario;
+  usuarioNome: string;
 }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [dadosCarregados, setDadosCarregados] = useState(false);
 
@@ -45,24 +27,23 @@ export default function AgendaModule({
   const [equipe, setEquipe] = useState("");
   const [descricao, setDescricao] = useState("");
   const [mensagem, setMensagem] = useState("");
+  const [servicoSelecionadoId, setServicoSelecionadoId] = useState<string | null>(null);
 
   const ehAdministrador = perfil === "administrador";
 
   useEffect(() => {
     const clientesSalvos = localStorage.getItem(CHAVE_CLIENTES);
     const agendaSalva = localStorage.getItem(CHAVE_AGENDA);
+    const funcionariosSalvos = localStorage.getItem(CHAVE_FUNCIONARIOS);
 
     try {
-      if (clientesSalvos) {
-        setClientes(JSON.parse(clientesSalvos));
-      }
-
-      if (agendaSalva) {
-        setServicos(JSON.parse(agendaSalva));
-      }
+      if (clientesSalvos) setClientes(JSON.parse(clientesSalvos));
+      if (funcionariosSalvos) setFuncionarios(JSON.parse(funcionariosSalvos));
+      if (agendaSalva) setServicos(JSON.parse(agendaSalva));
     } catch {
       localStorage.removeItem(CHAVE_AGENDA);
       setServicos([]);
+      setMensagem("Alguns dados da agenda estavam inválidos e foram reiniciados.");
     }
 
     setDadosCarregados(true);
@@ -70,17 +51,18 @@ export default function AgendaModule({
 
   useEffect(() => {
     if (!dadosCarregados) return;
-
     localStorage.setItem(CHAVE_AGENDA, JSON.stringify(servicos));
   }, [servicos, dadosCarregados]);
 
-  const servicosOrdenados = useMemo(() => {
-    return [...servicos].sort((a, b) => {
-      return `${a.data}T${a.horario}`.localeCompare(
-        `${b.data}T${b.horario}`,
-      );
-    });
+  const servicosVisiveis = useMemo(() => {
+    return [...servicos].sort((a, b) =>
+      `${a.data}T${a.horario}`.localeCompare(`${b.data}T${b.horario}`),
+    );
   }, [servicos]);
+
+  const servicoSelecionado = servicoSelecionadoId
+    ? servicos.find((servico) => servico.id === servicoSelecionadoId) ?? null
+    : null;
 
   function agendarServico(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -94,7 +76,7 @@ export default function AgendaModule({
     }
 
     if (!data || !horario || !equipe.trim()) {
-      setMensagem("Preencha data, horário e equipe.");
+      setMensagem("Preencha data, horário e funcionário responsável.");
       return;
     }
 
@@ -102,6 +84,7 @@ export default function AgendaModule({
       id: crypto.randomUUID(),
       clienteId: cliente.id,
       clienteNome: cliente.nome,
+      clienteTelefone: cliente.telefone,
       tipoServico: cliente.tipoServico,
       data,
       horario,
@@ -110,29 +93,54 @@ export default function AgendaModule({
       equipe: equipe.trim(),
       descricao: descricao.trim(),
       status: "Agendado",
+      historico: [
+        {
+          id: crypto.randomUUID(),
+          dataHora: new Date().toISOString(),
+          usuario: usuarioNome,
+          descricao: "Serviço agendado",
+        },
+      ],
     };
 
     setServicos((atuais) => [...atuais, novoServico]);
-
     setClienteId("");
     setData("");
     setHorario("");
     setEquipe("");
     setDescricao("");
-
     setMensagem("Serviço agendado com sucesso.");
+  }
+
+  function salvarServico(atualizado: Servico) {
+    setServicos((atuais) =>
+      atuais.map((servico) =>
+        servico.id === atualizado.id ? atualizado : servico,
+      ),
+    );
   }
 
   function alterarStatus(
     servicoId: string,
     novoStatus: Servico["status"],
   ) {
+    if (!ehAdministrador) return;
+
     setServicos((atuais) =>
       atuais.map((servico) =>
         servico.id === servicoId
           ? {
               ...servico,
               status: novoStatus,
+              historico: [
+                ...(servico.historico ?? []),
+                {
+                  id: crypto.randomUUID(),
+                  dataHora: new Date().toISOString(),
+                  usuario: usuarioNome,
+                  descricao: `Status alterado para ${novoStatus}`,
+                },
+              ],
             }
           : servico,
       ),
@@ -140,10 +148,11 @@ export default function AgendaModule({
   }
 
   function excluirServico(servicoId: string) {
+    if (!ehAdministrador) return;
+
     const confirmar = window.confirm(
       "Deseja realmente excluir este serviço?",
     );
-
     if (!confirmar) return;
 
     setServicos((atuais) =>
@@ -156,6 +165,7 @@ export default function AgendaModule({
     window.open(
       `https://www.google.com/maps/search/?api=1&query=${destino}`,
       "_blank",
+      "noopener,noreferrer",
     );
   }
 
@@ -165,13 +175,13 @@ export default function AgendaModule({
         <p className="text-sm font-bold uppercase text-yellow-400">
           Operação CHOQUESEG
         </p>
-
         <h2 className="mt-1 text-3xl font-black uppercase">
-          Agenda de serviços
+          "Agenda de serviços"
         </h2>
-
         <p className="mt-2 text-zinc-400">
-          Agende serviços, selecione a equipe e acompanhe o andamento.
+          {ehAdministrador
+            ? "Agende serviços, selecione o responsável e acompanhe o andamento."
+            : "Consulte e execute os serviços da equipe CHOQUESEG."}
         </p>
       </div>
 
@@ -195,14 +205,12 @@ export default function AgendaModule({
               <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">
                 Cliente
               </label>
-
               <select
                 value={clienteId}
                 onChange={(evento) => setClienteId(evento.target.value)}
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-400"
               >
                 <option value="">Selecione um cliente</option>
-
                 {clientes.map((cliente) => (
                   <option key={cliente.id} value={cliente.id}>
                     {cliente.nome}
@@ -211,26 +219,28 @@ export default function AgendaModule({
               </select>
             </div>
 
-            <Campo
-              label="Data"
-              tipo="date"
-              valor={data}
-              onChange={setData}
-            />
+            <Campo label="Data" tipo="date" valor={data} onChange={setData} />
+            <Campo label="Horário" tipo="time" valor={horario} onChange={setHorario} />
 
-            <Campo
-              label="Horário"
-              tipo="time"
-              valor={horario}
-              onChange={setHorario}
-            />
-
-            <Campo
-              label="Equipe"
-              valor={equipe}
-              placeholder="Ex.: Carlos e Marcos"
-              onChange={setEquipe}
-            />
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">
+                Funcionário responsável
+              </label>
+              <select
+                value={equipe}
+                onChange={(evento) => setEquipe(evento.target.value)}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-400"
+              >
+                <option value="">Selecione um funcionário</option>
+                {funcionarios
+                  .filter((funcionario) => funcionario.status === "Ativo")
+                  .map((funcionario) => (
+                    <option key={funcionario.id} value={funcionario.nome}>
+                      {funcionario.nome}
+                    </option>
+                  ))}
+              </select>
+            </div>
 
             <Campo
               label="Descrição"
@@ -250,82 +260,36 @@ export default function AgendaModule({
       )}
 
       <div className="mt-7 space-y-4">
-        {servicosOrdenados.length === 0 ? (
+        {servicosVisiveis.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-zinc-700 bg-black p-10 text-center">
             <p className="text-5xl">📅</p>
-
-            <p className="mt-4 font-black uppercase">
-              Nenhum serviço agendado
-            </p>
+            <p className="mt-4 font-black uppercase">Nenhum serviço agendado</p>
           </div>
         ) : (
-          servicosOrdenados.map((servico) => (
-            <article
+          servicosVisiveis.map((servico) => (
+            <CardServico
               key={servico.id}
-              className="rounded-2xl border border-zinc-800 bg-black p-5"
-            >
-              <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                <div>
-                  <h3 className="text-xl font-black uppercase">
-                    {servico.clienteNome}
-                  </h3>
-
-                  <div className="mt-2 space-y-1 text-sm text-zinc-400">
-                    <p>
-                      📅 {servico.data} às {servico.horario}
-                    </p>
-                    <p>🛠 {servico.tipoServico}</p>
-                    <p>👷 {servico.equipe}</p>
-                    <p>
-                      📍 {servico.endereco}, {servico.cidade}
-                    </p>
-                    {servico.descricao && (
-                      <p>📝 {servico.descricao}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      abrirMaps(servico.endereco, servico.cidade)
-                    }
-                    className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black uppercase text-black"
-                  >
-                    Abrir no Maps
-                  </button>
-
-                  <select
-                    value={servico.status}
-                    onChange={(evento) =>
-                      alterarStatus(
-                        servico.id,
-                        evento.target.value as Servico["status"],
-                      )
-                    }
-                    className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-bold text-white"
-                  >
-                    <option>Agendado</option>
-                    <option>Em execução</option>
-                    <option>Concluído</option>
-                  </select>
-
-                  {ehAdministrador && (
-                    <button
-                      type="button"
-                      onClick={() => excluirServico(servico.id)}
-                      className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400"
-                    >
-                      Excluir
-                    </button>
-                  )}
-                </div>
-              </div>
-            </article>
+              servico={servico}
+              ehAdministrador={ehAdministrador}
+              aoAbrir={(item) => setServicoSelecionadoId(item.id)}
+              aoExcluir={excluirServico}
+              aoAlterarStatus={alterarStatus}
+              aoAbrirMaps={abrirMaps}
+            />
           ))
         )}
       </div>
+
+      {servicoSelecionado && (
+        <ModalServico
+          servico={servicoSelecionado}
+          usuarioNome={usuarioNome}
+          ehAdministrador={ehAdministrador}
+          aoFechar={() => setServicoSelecionadoId(null)}
+          aoSalvar={salvarServico}
+          aoAbrirMaps={abrirMaps}
+        />
+      )}
     </section>
   );
 }
@@ -348,7 +312,6 @@ function Campo({
       <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">
         {label}
       </label>
-
       <input
         type={tipo}
         value={valor}

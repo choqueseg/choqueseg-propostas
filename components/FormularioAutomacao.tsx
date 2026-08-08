@@ -4,23 +4,22 @@ import { useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
 import { produtosIniciais } from "@/components/produtos";
-import PreviewSeguranca, {
-  type DadosPreviewSeguranca,
-  type ItemSegurancaPreview,
+import PreviewAutomacao, {
+  type DadosPreviewAutomacao,
+  type ItemAutomacaoPreview,
   type UnidadeOrcamento,
-} from "./PreviewSeguranca";
+} from "./PreviewAutomacao";
 
 const WHATSAPP_CHOQUESEG = "5579999390653";
 const LINK_AVALIACAO_GOOGLE =
   "https://www.google.com/search?q=CHOQUESEG+Aracaju+avalia%C3%A7%C3%A3o";
 
-type ItemOrcamento = ItemSegurancaPreview & {
+type ItemOrcamento = ItemAutomacaoPreview & {
   produtoId: string;
 };
 
-const produtosSeguranca = produtosIniciais.filter(
+const produtosAutomacao = produtosIniciais.filter(
   (produto) =>
-    produto.categoria === "Segurança Eletrônica" ||
     produto.categoria === "Automação" ||
     produto.categoria === "Mão de Obra",
 );
@@ -66,7 +65,7 @@ function inferirUnidade(nome: string): UnidadeOrcamento {
   return "Unidade";
 }
 
-export default function FormularioSeguranca() {
+export default function FormularioAutomacao() {
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [cidade, setCidade] = useState("");
@@ -81,7 +80,7 @@ export default function FormularioSeguranca() {
   const previewRef = useRef<HTMLDivElement>(null);
 
   function adicionarProduto() {
-    const produto = produtosSeguranca.find(
+    const produto = produtosAutomacao.find(
       (item) => item.id === produtoSelecionado,
     );
 
@@ -175,7 +174,7 @@ export default function FormularioSeguranca() {
     };
   }, [itens, desconto]);
 
-  const dadosPreview: DadosPreviewSeguranca = {
+  const dadosPreview: DadosPreviewAutomacao = {
     nome,
     telefone,
     cidade,
@@ -258,7 +257,7 @@ export default function FormularioSeguranca() {
       const nomeCliente =
         nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
 
-      pdf.save(`Proposta-Seguranca-CHOQUESEG-${nomeCliente}.pdf`);
+      pdf.save(`Proposta-Automacao-CHOQUESEG-${nomeCliente}.pdf`);
       alert("PDF gerado com sucesso.");
     } catch (erro) {
       console.error("Erro ao gerar PDF:", erro);
@@ -278,7 +277,7 @@ export default function FormularioSeguranca() {
       numeroCliente.length >= 10 ? `55${numeroCliente}` : "";
 
     const mensagem = encodeURIComponent(
-      `Olá, ${nome || "cliente"}! Segue a proposta de segurança eletrônica preparada pela CHOQUESEG. O valor total é ${moeda(
+      `Olá, ${nome || "cliente"}! Segue a proposta de automação residencial preparada pela CHOQUESEG. O valor total é ${moeda(
         totais.totalFinal,
       )}.`,
     );
@@ -292,7 +291,7 @@ export default function FormularioSeguranca() {
 
   function fecharComChoqueSeg() {
     const mensagem = encodeURIComponent(
-      `Olá, CHOQUESEG! Quero fechar a proposta de segurança eletrônica de ${moeda(
+      `Olá, CHOQUESEG! Quero fechar a proposta de automação residencial de ${moeda(
         totais.totalFinal,
       )}. Cliente: ${nome || "Não informado"}.`,
     );
@@ -313,7 +312,7 @@ export default function FormularioSeguranca() {
               CHOQUESEG
             </p>
             <h1 className="text-lg font-black uppercase md:text-2xl">
-              Proposta de Segurança Eletrônica
+              Proposta de Automação Residencial
             </h1>
           </div>
 
@@ -391,7 +390,7 @@ export default function FormularioSeguranca() {
               >
                 <option value="">Selecione um produto</option>
 
-                {produtosSeguranca.map((produto) => (
+                {produtosAutomacao.map((produto) => (
                   <option key={produto.id} value={produto.id}>
                     {produto.nome}
                   </option>
@@ -417,9 +416,9 @@ export default function FormularioSeguranca() {
               </div>
 
               <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-xs leading-relaxed text-zinc-400">
-                Para cerca elétrica, adicione o item, escolha a unidade
-                <strong className="text-yellow-400"> Metro</strong>, informe
-                a metragem e o valor por metro.
+                Selecione equipamentos de automação no catálogo ou use
+                <strong className="text-yellow-400"> Item manual</strong> para
+                adicionar soluções personalizadas.
               </div>
             </Secao>
 
@@ -540,7 +539,7 @@ export default function FormularioSeguranca() {
             </div>
           </section>
 
-          <PreviewSeguranca ref={previewRef} dados={dadosPreview} />
+          <PreviewAutomacao ref={previewRef} dados={dadosPreview} />
         </section>
       </div>
     </main>

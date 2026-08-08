@@ -109,9 +109,16 @@ async function comprimirImagem(arquivo: File): Promise<string> {
   }
 }
 
-function numero(valor: string) {
-  const limpo = valor.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+function numero(valor?: string | number | null) {
+  const texto = String(valor ?? "");
+
+  const limpo = texto
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
   const convertido = Number(limpo);
+
   return Number.isFinite(convertido) ? convertido : 0;
 }
 

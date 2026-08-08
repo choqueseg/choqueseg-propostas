@@ -35,6 +35,7 @@ export type DadosPreview = {
   parcelaFinanciamento: string;
   instalacoes: InstalacaoPortfolio[];
 };
+
 type PreviewPropostaProps = {
   dados: DadosPreview;
 };
@@ -47,14 +48,27 @@ const WHATSAPP_CHOQUESEG = "5579999390653";
 const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const fatoresAracaju = [1.08, 1.06, 1.02, 0.96, 0.88, 0.84, 0.86, 0.91, 0.98, 1.06, 1.17, 1.18];
 
-function numero(valor: string) {
-  const limpo = valor.replace(/[^\d,.-]/g, "").replace(/\./g, "").replace(",", ".");
+
+function numero(valor?: string | number | null) {
+  const texto = String(valor ?? "");
+
+  const limpo = texto
+    .replace(/[^\d,.-]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
   const convertido = Number(limpo);
+
   return Number.isFinite(convertido) ? convertido : 0;
 }
 
-function dinheiro(valor: number) {
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
+function dinheiro(valor?: number | null) {
+  const numeroSeguro = Number(valor ?? 0);
+  return (Number.isFinite(numeroSeguro) ? numeroSeguro : 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 function plural(quantidade: number, singular: string, pluralTexto: string) {
@@ -463,14 +477,25 @@ const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
               <p className="text-xl font-black uppercase leading-tight text-yellow-400 sm:text-2xl">
                 Vamos deixar o Sol pagar pelo seu conforto?
               </p>
-              <a
-                href={linkWhatsApp}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex rounded-xl bg-yellow-400 px-4 py-2.5 text-sm font-black uppercase text-black transition hover:scale-[1.02] hover:bg-yellow-300"
-              >
-                Quero fechar com a CHOQUESEG
-              </a>
+              <div className="mt-3 flex flex-col gap-3 sm:max-w-[340px]">
+                <a
+                  href={linkWhatsApp}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black transition hover:scale-[1.02] hover:bg-yellow-300"
+                >
+                  ✅ Quero fechar com a CHOQUESEG
+                </a>
+
+                <a
+                  href="https://g.page/r/CTbFpWqrl-nMEBO/review"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center rounded-xl border-2 border-yellow-400 px-4 py-3 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+                >
+                  ⭐ Avaliar a CHOQUESEG no Google
+                </a>
+              </div>
               <p className="mt-3 text-base font-bold text-white">
                 (79) 9.9939-0653 • @choqueseg
               </p>
