@@ -1,0 +1,25 @@
+warning: in the working copy of '.gitignore', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'components/PreviewProposta.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'modules/agenda/AgendaModule.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'modules/agenda/ModalServico.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'modules/agenda/types.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+ .gitignore                                  |    1 [32m+[m
+ components/CadastroProdutos.tsx             |   63 [32m+[m[31m-[m
+ components/FormularioSeguranca.tsx          | 1341 [32m+++++++++++++++++++++++++[m[31m--[m
+ components/PreviewAutomacao.tsx             |   27 [32m+[m[31m-[m
+ components/PreviewEletrica.tsx              |   27 [32m+[m[31m-[m
+ components/PreviewProposta.tsx              | 1272 [32m+++++++++++++[m[31m------------[m
+ components/PreviewSeguranca.tsx             |   27 [32m+[m[31m-[m
+ modules/agenda/AgendaModule.tsx             |  675 [32m+++++++++++[m[31m---[m
+ modules/agenda/ModalServico.tsx             |   13 [32m+[m[31m-[m
+ modules/agenda/types.ts                     |   70 [32m++[m
+ modules/clientes/ClientesModule.tsx         |  834 [32m+++++++++++[m[31m------[m
+ modules/estoque/EstoqueModule.tsx           | 1011 [32m+++++++++++[m[31m---------[m
+ modules/estoque/catalogoProdutos.ts         |  162 [32m++++[m
+ modules/financeiro/FinanceiroModule.tsx     |  950 [32m++++++++++++[m[31m-------[m
+ modules/funcionarios/FuncionariosModule.tsx |  466 [32m+++++++[m[31m---[m
+ package-lock.json                           |  379 [32m+++++++[m[31m-[m
+ package.json                                |   10 [32m+[m[31m-[m
+ 17 files changed, 5314 insertions(+), 2014 deletions(-)

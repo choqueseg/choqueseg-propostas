@@ -55,6 +55,9 @@ export default function CadastroProdutos() {
   );
   const [busca, setBusca] = useState("");
   const [categoriaFiltro, setCategoriaFiltro] = useState("Todas");
+  const [secaoAtiva, setSecaoAtiva] = useState<"produtos" | "cadastro">(
+    "produtos",
+  );
 
   useEffect(() => {
     try {
@@ -127,11 +130,13 @@ export default function CadastroProdutos() {
     }
 
     limparFormulario();
+    setSecaoAtiva("produtos");
   }
 
   function editarProduto(produto: Produto) {
     setFormulario(produto);
     setProdutoEditandoId(produto.id);
+    setSecaoAtiva("cadastro");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -179,7 +184,7 @@ export default function CadastroProdutos() {
   return (
     <main className="min-h-screen bg-zinc-950 px-4 py-6 text-white">
       <div className="mx-auto max-w-7xl">
-        <header className="mb-6 rounded-3xl border border-yellow-400/40 bg-black p-5">
+        <header className="rounded-3xl border border-yellow-400/40 bg-black p-5">
           <p className="text-sm font-black uppercase tracking-[0.2em] text-yellow-400">
             CHOQUESEG
           </p>
@@ -189,12 +194,56 @@ export default function CadastroProdutos() {
           </h1>
 
           <p className="mt-2 text-zinc-400">
-            Cadastre e atualize os produtos usados nos orçamentos.
+            Consulte os produtos cadastrados ou abra o formulário para adicionar um novo produto.
           </p>
         </header>
 
-        <div className="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
-          <aside className="self-start rounded-3xl border border-yellow-400/40 bg-black p-5 lg:sticky lg:top-5">
+        <div className="mt-6 flex flex-col gap-5 lg:flex-row lg:items-start">
+          <aside className="lg:sticky lg:top-5 lg:w-64 lg:shrink-0">
+            <div className="rounded-2xl border border-zinc-800 bg-black p-2">
+              <p className="px-3 py-2 text-xs font-black uppercase text-zinc-500">
+                Menu de produtos
+              </p>
+
+              <nav className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    limparFormulario();
+                    setSecaoAtiva("produtos");
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                    secaoAtiva === "produtos"
+                      ? "bg-yellow-400 text-black"
+                      : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
+                  }`}
+                >
+                  <span className="text-lg">📦</span>
+                  <span>Produtos cadastrados</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    limparFormulario();
+                    setSecaoAtiva("cadastro");
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                    secaoAtiva === "cadastro"
+                      ? "bg-yellow-400 text-black"
+                      : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
+                  }`}
+                >
+                  <span className="text-lg">➕</span>
+                  <span>Novo produto</span>
+                </button>
+              </nav>
+            </div>
+          </aside>
+
+          <section className="min-w-0 flex-1">
+            {secaoAtiva === "cadastro" && (
+            <section className="rounded-3xl border border-yellow-400/40 bg-black p-5">
             <h2 className="mb-4 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">
               {produtoEditandoId ? "Editar produto" : "Novo produto"}
             </h2>
@@ -288,8 +337,10 @@ export default function CadastroProdutos() {
                 Limpar
               </button>
             </div>
-          </aside>
+            </section>
+            )}
 
+            {secaoAtiva === "produtos" && (
           <section className="rounded-3xl border border-zinc-800 bg-black p-5">
             <div className="mb-5 grid gap-3 md:grid-cols-[1fr_250px]">
               <input
@@ -412,6 +463,8 @@ export default function CadastroProdutos() {
                   </article>
                 ))}
               </div>
+            )}
+          </section>
             )}
           </section>
         </div>

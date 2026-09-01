@@ -14,6 +14,14 @@ import FuncionariosModule from "@/modules/funcionarios/FuncionariosModule";
 import FinanceiroModule from "@/modules/financeiro/FinanceiroModule";
 import EstoqueModule from "@/modules/estoque/EstoqueModule";
 import FormularioAutomacao from "@/components/FormularioAutomacao";
+
+import ContratosModule from "@/modules/contratos/ContratosModule";
+import EngenhariaModule from "@/modules/engenharia/EngenhariaModule";
+import Projetos3DModule from "@/modules/projetos3d/Projetos3DModule";
+import SalaIAModule from "@/modules/sala-ia/SalaIAModule";
+import TreinamentosModule from "@/modules/treinamentos/TreinamentosModule";
+import VistoriasModule from "@/modules/vistorias/VistoriasModule";
+
 type PerfilUsuario =
   | "administrador"
   | "vendedor"
@@ -39,7 +47,13 @@ type TelaSistema =
   | "agenda"
   | "financeiro"
   | "funcionarios"
-  | "estoque";
+  | "estoque"
+  | "vistorias"
+  | "engenharia"
+  | "treinamentos"
+  | "contratos"
+  | "sala-ia"
+  | "projetos3d";
 
 type TipoProposta =
   | "energia-solar"
@@ -51,7 +65,6 @@ type TipoProposta =
 const CHAVE_SESSAO = "choqueseg-pro-sessao";
 
 export default function Home() {
-  
   const [carregando, setCarregando] = useState(false);
   const [usuarioLogado, setUsuarioLogado] =
     useState<UsuarioLogado | null>(null);
@@ -64,135 +77,135 @@ export default function Home() {
     useState<TelaSistema>("dashboard");
 
   useEffect(() => {
-  try {
-    const sessaoSalva = localStorage.getItem(CHAVE_SESSAO);
-
-    if (sessaoSalva) {
-      try {
-        const sessao = JSON.parse(sessaoSalva) as UsuarioLogado;
-
-        const perfilRestaurado: PerfilUsuario =
-          sessao.perfil === "administrador" ||
-          sessao.perfil === "vendedor" ||
-          sessao.perfil === "tecnico" ||
-          sessao.perfil === "atendente" ||
-          sessao.perfil === "funcionario"
-            ? sessao.perfil
-            : "funcionario";
-
-        const sessaoNormalizada: UsuarioLogado = {
-          ...sessao,
-          perfil: perfilRestaurado,
-        };
-
-        setUsuarioLogado(sessaoNormalizada);
-
-        if (perfilRestaurado === "administrador") {
-          setTelaAtual("dashboard");
-        } else if (perfilRestaurado === "vendedor") {
-          setTelaAtual("clientes");
-        } else if (perfilRestaurado === "atendente") {
-          setTelaAtual("agenda");
-        } else {
-          setTelaAtual("agenda");
-        }
-      } catch {
-        localStorage.removeItem(CHAVE_SESSAO);
-        setUsuarioLogado(null);
-      }
-    }
-  } catch (erro) {
-    console.error("Erro ao carregar sessão:", erro);
-    setUsuarioLogado(null);
-  } finally {
-    setCarregando(false);
-  }
-}, []);
- function entrar(evento: FormEvent<HTMLFormElement>) {
-  evento.preventDefault();
-  setErroLogin("");
-
-  const usuarioDigitado = usuario.trim().toLowerCase();
-
-  // Login principal do administrador
-  if (usuarioDigitado === "admin" && senha === "1234") {
-    const sessao: UsuarioLogado = {
-      nome: "Administrador CHOQUESEG",
-      perfil: "administrador",
-    };
-
-    localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
-    setUsuarioLogado(sessao);
-    setTelaAtual("dashboard");
-    setUsuario("");
-    setSenha("");
-    return;
-  }
-
-  // Login dos funcionários cadastrados
-  const dadosFuncionarios = localStorage.getItem(
-    "choqueseg-funcionarios"
-  );
-
-  if (dadosFuncionarios) {
     try {
-      const funcionarios = JSON.parse(dadosFuncionarios);
+      const sessaoSalva = localStorage.getItem(CHAVE_SESSAO);
 
-      const funcionarioEncontrado = funcionarios.find(
-        (funcionario: {
-          nome: string;
-          usuario: string;
-          senha: string;
-          perfil?: "administrador" | "vendedor" | "tecnico" | "atendente";
-          nivelAcesso?: string;
-          status: "Ativo" | "Inativo";
-        }) =>
-          funcionario.usuario?.trim().toLowerCase() ===
-            usuarioDigitado &&
-          funcionario.senha === senha
-      );
+      if (sessaoSalva) {
+        try {
+          const sessao = JSON.parse(sessaoSalva) as UsuarioLogado;
 
-      if (funcionarioEncontrado) {
-        if (funcionarioEncontrado.status !== "Ativo") {
-          setErroLogin("Este funcionário está inativo.");
-          return;
+          const perfilRestaurado: PerfilUsuario =
+            sessao.perfil === "administrador" ||
+            sessao.perfil === "vendedor" ||
+            sessao.perfil === "tecnico" ||
+            sessao.perfil === "atendente" ||
+            sessao.perfil === "funcionario"
+              ? sessao.perfil
+              : "funcionario";
+
+          const sessaoNormalizada: UsuarioLogado = {
+            ...sessao,
+            perfil: perfilRestaurado,
+          };
+
+          setUsuarioLogado(sessaoNormalizada);
+
+          if (perfilRestaurado === "administrador") {
+            setTelaAtual("dashboard");
+          } else if (perfilRestaurado === "vendedor") {
+            setTelaAtual("clientes");
+          } else if (perfilRestaurado === "atendente") {
+            setTelaAtual("agenda");
+          } else {
+            setTelaAtual("agenda");
+          }
+        } catch {
+          localStorage.removeItem(CHAVE_SESSAO);
+          setUsuarioLogado(null);
         }
-
-        const perfilFuncionario: PerfilUsuario =
-          funcionarioEncontrado.perfil === "administrador" ||
-          funcionarioEncontrado.perfil === "vendedor" ||
-          funcionarioEncontrado.perfil === "tecnico" ||
-          funcionarioEncontrado.perfil === "atendente"
-            ? funcionarioEncontrado.perfil
-            : "tecnico";
-
-        const sessao: UsuarioLogado = {
-          nome: funcionarioEncontrado.nome,
-          perfil: perfilFuncionario,
-        };
-
-        localStorage.setItem(
-          CHAVE_SESSAO,
-          JSON.stringify(sessao)
-        );
-
-        setUsuarioLogado(sessao);
-        setTelaAtual("agenda");
-        setUsuario("");
-        setSenha("");
-        return;
       }
-    } catch {
-      setErroLogin(
-        "Não foi possível acessar os funcionários cadastrados."
-      );
+    } catch (erro) {
+      console.error("Erro ao carregar sessão:", erro);
+      setUsuarioLogado(null);
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  function entrar(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    setErroLogin("");
+
+    const usuarioDigitado = usuario.trim().toLowerCase();
+
+    // Login principal do administrador
+    if (usuarioDigitado === "admin" && senha === "1234") {
+      const sessao: UsuarioLogado = {
+        nome: "Administrador CHOQUESEG",
+        perfil: "administrador",
+      };
+
+      localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
+      setUsuarioLogado(sessao);
+      setTelaAtual("dashboard");
+      setUsuario("");
+      setSenha("");
       return;
     }
+
+    // Login dos funcionários cadastrados
+    const dadosFuncionarios = localStorage.getItem(
+      "choqueseg-funcionarios"
+    );
+
+    if (dadosFuncionarios) {
+      try {
+        const funcionarios = JSON.parse(dadosFuncionarios);
+
+        const funcionarioEncontrado = funcionarios.find(
+          (funcionario: {
+            nome: string;
+            usuario: string;
+            senha: string;
+            perfil?: "administrador" | "vendedor" | "tecnico" | "atendente";
+            nivelAcesso?: string;
+            status: "Ativo" | "Inativo";
+          }) =>
+            funcionario.usuario?.trim().toLowerCase() ===
+              usuarioDigitado &&
+            funcionario.senha === senha
+        );
+
+        if (funcionarioEncontrado) {
+          if (funcionarioEncontrado.status !== "Ativo") {
+            setErroLogin("Este funcionário está inativo.");
+            return;
+          }
+
+          const perfilFuncionario: PerfilUsuario =
+            funcionarioEncontrado.perfil === "administrador" ||
+            funcionarioEncontrado.perfil === "vendedor" ||
+            funcionarioEncontrado.perfil === "tecnico" ||
+            funcionarioEncontrado.perfil === "atendente"
+              ? funcionarioEncontrado.perfil
+              : "tecnico";
+
+          const sessao: UsuarioLogado = {
+            nome: funcionarioEncontrado.nome,
+            perfil: perfilFuncionario,
+          };
+
+          localStorage.setItem(
+            CHAVE_SESSAO,
+            JSON.stringify(sessao)
+          );
+
+          setUsuarioLogado(sessao);
+          setTelaAtual("agenda");
+          setUsuario("");
+          setSenha("");
+          return;
+        }
+      } catch {
+        setErroLogin(
+          "Não foi possível acessar os funcionários cadastrados."
+        );
+        return;
+      }
+    }
+
+    setErroLogin("Usuário ou senha inválidos.");
   }
-
-  setErroLogin("Usuário ou senha inválidos.");
-}
-
 
   function sair() {
     localStorage.removeItem(CHAVE_SESSAO);
@@ -207,7 +220,7 @@ export default function Home() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-zinc-950 text-yellow-400">
         <p className="text-lg font-black uppercase">
-           CHOQUESEG PRO...
+          CHOQUESEG PRO...
         </p>
       </main>
     );
@@ -370,16 +383,17 @@ export default function Home() {
             />
           </div>
 
-         {telaAtual === "dashboard" && ehAdministrador && (
-  <DashboardModule alterarTela={setTelaAtual} />
-)}
-
-         {telaAtual === "clientes" && podeClientes && (
-           <ClientesModule />
+          {telaAtual === "dashboard" && ehAdministrador && (
+            <DashboardModule alterarTela={setTelaAtual} />
           )}
+
+          {telaAtual === "clientes" && podeClientes && (
+            <ClientesModule />
+          )}
+
           {telaAtual === "funil" && podeFunil && (
-  <FunilModule />
-)}
+            <FunilModule />
+          )}
 
           {telaAtual === "agenda" && podeAgenda && (
             <AgendaModule
@@ -398,6 +412,38 @@ export default function Home() {
 
           {telaAtual === "funcionarios" && ehAdministrador && (
             <FuncionariosModule />
+          )}
+
+          {telaAtual === "vistorias" && ehAdministrador && (
+            <VistoriasModule
+              usuarioNome={usuarioLogado.nome}
+              perfil={usuarioLogado.perfil}
+            />
+          )}
+
+          {telaAtual === "engenharia" && ehAdministrador && (
+            <EngenhariaModule />
+          )}
+
+          {telaAtual === "treinamentos" && ehAdministrador && (
+            <TreinamentosModule
+              usuarioNome={usuarioLogado.nome}
+              perfil={usuarioLogado.perfil}
+            />
+          )}
+
+          {telaAtual === "contratos" && ehAdministrador && (
+            <ContratosModule />
+          )}
+
+          {telaAtual === "sala-ia" && ehAdministrador && (
+            <SalaIAModule />
+          )}
+
+          {telaAtual === "projetos3d" && ehAdministrador && (
+            <Projetos3DModule
+              aoSair={() => setTelaAtual("dashboard")}
+            />
           )}
 
           {telaAtual === "propostas" && podePropostas && (
@@ -443,13 +489,12 @@ export default function Home() {
             )}
 
           {telaAtual === "automacao" && podePropostas && (
-  <ModuloComVoltar
-    voltar={() => setTelaAtual("propostas")}
-  >
-    <FormularioAutomacao />
-  </ModuloComVoltar>
-)}
-
+            <ModuloComVoltar
+              voltar={() => setTelaAtual("propostas")}
+            >
+              <FormularioAutomacao />
+            </ModuloComVoltar>
+          )}
         </main>
       </div>
     </div>
@@ -478,6 +523,12 @@ function MenuLateral({
     { tela: "propostas", nome: "Propostas", icone: "📄" },
     { tela: "funcionarios", nome: "Funcionários", icone: "👷" },
     { tela: "estoque", nome: "Estoque", icone: "📦" },
+    { tela: "vistorias", nome: "Vistorias", icone: "🔎" },
+    { tela: "engenharia", nome: "Projetos / Engenharia", icone: "📐" },
+    { tela: "treinamentos", nome: "Treinamentos", icone: "🎓" },
+    { tela: "contratos", nome: "Contratos", icone: "📑" },
+    { tela: "sala-ia", nome: "Sala IA", icone: "🤖" },
+    { tela: "projetos3d", nome: "Projeto 3D", icone: "🏠" },
   ];
 
   const itensVendedor: Array<{
@@ -557,6 +608,12 @@ function MenuMobile({
           ["estoque", "Estoque"],
           ["propostas", "Propostas"],
           ["funcionarios", "Funcionários"],
+          ["vistorias", "Vistorias"],
+          ["engenharia", "Projetos / Engenharia"],
+          ["treinamentos", "Treinamentos"],
+          ["contratos", "Contratos"],
+          ["sala-ia", "Sala IA"],
+          ["projetos3d", "Projeto 3D"],
         ]
       : perfil === "vendedor"
         ? [

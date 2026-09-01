@@ -18,6 +18,7 @@ type Props = {
   servico: Servico;
   usuarioNome: string;
   ehAdministrador: boolean;
+  podeVerContatoCliente: boolean;
   aoFechar: () => void;
   aoSalvar: (servico: Servico) => void;
   aoAbrirMaps: (endereco: string, cidade: string) => void;
@@ -86,6 +87,7 @@ function criarChecklist(
     );
   });
 }
+
 
 function criarEvento(usuario: string, descricao: string): EventoHistorico {
   return {
@@ -273,7 +275,14 @@ function registrarChegadaCliente() {
 
           <section className="grid gap-4 rounded-2xl border border-zinc-800 bg-black p-5 md:grid-cols-2 lg:grid-cols-4">
             <Info titulo="Cliente" valor={rascunho.clienteNome} />
-            <Info titulo="Telefone" valor={rascunho.clienteTelefone || "Não informado"} />
+            <Info
+              titulo="Telefone / WhatsApp"
+              valor={
+                ehAdministrador
+                  ? rascunho.clienteTelefone || "Não informado"
+                  : "Contato restrito à gerência"
+              }
+            />
             <Info titulo="Data e horário" valor={`${rascunho.data} às ${rascunho.horario}`} />
             <Info titulo="Responsável" valor={rascunho.equipe} />
             <div className="md:col-span-2 lg:col-span-3">
@@ -426,6 +435,7 @@ function registrarChegadaCliente() {
             bloqueado={bloqueado}
           />
 
+
           <MateriaisServico
             materiais={rascunho.materiais ?? []}
             aoAlterar={atualizarMateriais}
@@ -524,6 +534,7 @@ function registrarChegadaCliente() {
     </div>
   );
 }
+
 function CampoNumero({
   label,
   valor,

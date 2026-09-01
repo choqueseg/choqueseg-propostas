@@ -254,14 +254,25 @@ const PreviewAutomacao = forwardRef<HTMLDivElement, Props>(
                   Vamos deixar sua casa mais inteligente?
                 </p>
 
-                <a
-                  href={linkFechamento}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-flex rounded-xl bg-yellow-400 px-5 py-3 text-sm font-black uppercase text-black"
-                >
-                  Quero fechar com a CHOQUESEG
-                </a>
+                <div className="mt-4 flex flex-col gap-3 sm:max-w-[360px]">
+                  <a
+                    href={linkFechamento}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl bg-yellow-400 px-5 py-3 text-sm font-black uppercase text-black"
+                  >
+                    ✅ Quero fechar com a CHOQUESEG
+                  </a>
+
+                  <a
+                    href="https://g.page/r/CTbFpWqrl-nMEBO/review"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center rounded-xl border-2 border-yellow-400 px-5 py-3 text-sm font-black uppercase text-yellow-400"
+                  >
+                    ⭐ Avaliar a CHOQUESEG no Google
+                  </a>
+                </div>
 
                 <p className="mt-4 font-bold text-white">
                   (79) 9.9939-0653 • @choqueseg

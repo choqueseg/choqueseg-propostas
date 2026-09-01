@@ -1,54 +1,125 @@
-"use client";
 
-import { forwardRef } from "react";
 
-export type InstalacaoPortfolio = {
-  foto: string;
-  cidade: string;
-  descricao: string;
+import { useEffect, useMemo, useRef, useState } from "react";
+import html2canvas from "html2canvas-pro";
+import jsPDF from "jspdf";
+import { createClient } from "@/utils/supabase/client";
+import PreviewProposta, { DadosPreview, type InstalacaoPortfolio } from "./PreviewProposta";
+import {
+  type Equipamento,
+  inversoresPadrao,
+  microinversoresPadrao,
+  modulosPadrao,
+} from "./equipamentos";
+type ClienteCadastrado = {
+  id: string;
+  nome: string;
+  telefone: string | null;
+  cidade: string | null;
+  endereco: string | null;
+  cpf_cnpj: string | null;
 };
 
-export type DadosPreview = {
+const supabase = createClient();
+
+type KitSolar = {
+  id: string;
+  nome: string;
+  geracao: string;
+  potencia: string;
+  quantidadeModulos: string;
+  moduloId: string;
+  quantidadeInversores: string;
+  inversorId: string;
+  tipoInversor: "String" | "Microinversor";
+  valor: string;
+};
+
+const kits: KitSolar[] = [
+  { id: "300", nome: "Kit 300 kWh", geracao: "300", potencia: "2,50 kWp", quantidadeModulos: "4", moduloId: "jinko-630", quantidadeInversores: "2", inversorId: "hoymiles-1600", tipoInversor: "Microinversor", valor: "R$ 6.999,00" },
+  { id: "400", nome: "Kit 400 kWh", geracao: "400", potencia: "2,84 kWp", quantidadeModulos: "4", moduloId: "jinko-710", quantidadeInversores: "2", inversorId: "hoymiles-2000", tipoInversor: "Microinversor", valor: "R$ 8.399,00" },
+  { id: "500", nome: "Kit 500 kWh", geracao: "500", potencia: "3,55 kWp", quantidadeModulos: "5", moduloId: "jinko-710", quantidadeInversores: "1", inversorId: "huawei-3", tipoInversor: "String", valor: "R$ 8.950,00" },
+  { id: "600", nome: "Kit 600 kWh", geracao: "600", potencia: "4,37 kWp", quantidadeModulos: "7", moduloId: "jinko-625", quantidadeInversores: "1", inversorId: "huawei-3", tipoInversor: "String", valor: "R$ 10.099,00" },
+  { id: "700", nome: "Kit 700 kWh", geracao: "700", potencia: "5,62 kWp", quantidadeModulos: "9", moduloId: "jinko-625", quantidadeInversores: "1", inversorId: "huawei-5", tipoInversor: "String", valor: "R$ 12.799,00" },
+  { id: "800", nome: "Kit 800 kWh", geracao: "800", potencia: "6,25 kWp", quantidadeModulos: "10", moduloId: "jinko-625", quantidadeInversores: "1", inversorId: "huawei-5", tipoInversor: "String", valor: "R$ 13.750,00" },
+  { id: "900", nome: "Kit 900 kWh", geracao: "900", potencia: "6,88 kWp", quantidadeModulos: "11", moduloId: "jinko-625", quantidadeInversores: "1", inversorId: "huawei-6", tipoInversor: "String", valor: "R$ 14.699,00" },
+  { id: "1000", nome: "Kit 1000 kWh", geracao: "1000", potencia: "7,50 kWp", quantidadeModulos: "12", moduloId: "jinko-625", quantidadeInversores: "1", inversorId: "huawei-6", tipoInversor: "String", valor: "R$ 15.999,00" },
+  { id: "1200", nome: "Kit 1200 kWh", geracao: "1200", potencia: "9,23 kWp", quantidadeModulos: "13", moduloId: "jinko-710", quantidadeInversores: "1", inversorId: "huawei-8", tipoInversor: "String", valor: "R$ 18.250,00" },
+  { id: "1300", nome: "Kit 1300 kWh", geracao: "1300", potencia: "9,23 kWp", quantidadeModulos: "13", moduloId: "jinko-710", quantidadeInversores: "1", inversorId: "huawei-8", tipoInversor: "String", valor: "R$ 19.599,00" },
+  { id: "1500", nome: "Kit 1500 kWh", geracao: "1500", potencia: "11,36 kWp", quantidadeModulos: "16", moduloId: "jinko-710", quantidadeInversores: "1", inversorId: "huawei-10", tipoInversor: "String", valor: "R$ 22.799,00" },
+];
+
+type Formulario = {
   nome: string;
   telefone: string;
   cidade: string;
   consumo: string;
   valorConta: string;
+  kitId: string;
+  modoSistema: "kit" | "personalizado";
   geracao: string;
   potencia: string;
   quantidadeModulos: string;
-  marcaModulo: string;
-  modeloModulo: string;
-  potenciaModulo: string;
-  moduloBifacial: boolean;
+  moduloId: string;
   quantidadeInversores: string;
-  marcaInversor: string;
-  modeloInversor: string;
-  potenciaInversor: string;
+  inversorId: string;
   tipoInversor: "String" | "Microinversor";
   valorProposta: string;
-  parcelasCartao: number;
-  totalCartao: string;
-  parcelaCartao: string;
-  parcelasFinanciamento: number;
-  totalFinanciamento: string;
-  parcelaFinanciamento: string;
-  instalacoes: InstalacaoPortfolio[];
+  percentualCartao: string;
+  parcelasCartao: string;
+  percentualFinanciamento: string;
+  parcelasFinanciamento: string;
 };
 
-type PreviewPropostaProps = {
-  dados: DadosPreview;
-  modo?: "normal" | "celular";
+const formularioInicial: Formulario = {
+  nome: "", telefone: "", cidade: "", consumo: "", valorConta: "", kitId: "",
+  modoSistema: "kit", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "",
+  quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "",
+  percentualCartao: "", parcelasCartao: "18", percentualFinanciamento: "", parcelasFinanciamento: "84",
 };
 
-const LOGO = "/imagens/logo/brasao-choqueseg.png";
-const TELHADO = "/imagens/capa/telhado.solar.png";
-const FOTO_EQUIPE = "/imagens/capa/capa.gerador.png";
-const WHATSAPP_CHOQUESEG = "5579999390653";
+const instalacoesIniciais: InstalacaoPortfolio[] = Array.from({ length: 4 }, () => ({
+  foto: "",
+  cidade: "",
+  descricao: "",
+}));
 
-const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-const fatoresAracaju = [1.08, 1.06, 1.02, 0.96, 0.88, 0.84, 0.86, 0.91, 0.98, 1.06, 1.17, 1.18];
+async function comprimirImagem(arquivo: File): Promise<string> {
+  if (!arquivo.type.startsWith("image/")) {
+    throw new Error("Selecione um arquivo de imagem.");
+  }
 
+  const urlTemporaria = URL.createObjectURL(arquivo);
+
+  try {
+    const imagem = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Não foi possível abrir a imagem."));
+      img.src = urlTemporaria;
+    });
+
+    const limiteLargura = 1400;
+    const limiteAltura = 900;
+    const proporcao = Math.min(
+      limiteLargura / imagem.naturalWidth,
+      limiteAltura / imagem.naturalHeight,
+      1,
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(imagem.naturalWidth * proporcao));
+    canvas.height = Math.max(1, Math.round(imagem.naturalHeight * proporcao));
+
+    const contexto = canvas.getContext("2d");
+    if (!contexto) throw new Error("Não foi possível processar a imagem.");
+
+    contexto.drawImage(imagem, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.78);
+  } finally {
+    URL.revokeObjectURL(urlTemporaria);
+  }
+}
 
 function numero(valor?: string | number | null) {
   const texto = String(valor ?? "");
@@ -63,578 +134,625 @@ function numero(valor?: string | number | null) {
   return Number.isFinite(convertido) ? convertido : 0;
 }
 
-
-function dinheiro(valor?: number | null) {
-  const numeroSeguro = Number(valor ?? 0);
-  return (Number.isFinite(numeroSeguro) ? numeroSeguro : 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+function dinheiro(valor: number) {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function plural(quantidade: number, singular: string, pluralTexto: string) {
-  return quantidade === 1 ? singular : pluralTexto;
+async function esperarImagens(elemento: HTMLElement) {
+  const imagens = Array.from(elemento.querySelectorAll("img"));
+
+  await Promise.all(
+    imagens.map(
+      (imagem) =>
+        new Promise<void>((resolve) => {
+          // Mesmo que a imagem tenha falhado, não deixa o PDF travado.
+          if (imagem.complete) {
+            resolve();
+            return;
+          }
+
+          const finalizar = () => resolve();
+
+          imagem.addEventListener("load", finalizar, { once: true });
+          imagem.addEventListener("error", finalizar, { once: true });
+
+          // Segurança: libera a geração após 5 segundos.
+          setTimeout(finalizar, 5000);
+        }),
+    ),
+  );
 }
 
-function textoSeguro(...partes: Array<string | undefined | null>) {
-  return partes
-    .filter((parte) => Boolean(parte && parte.trim()))
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+export default function FormularioProposta() {
+  const [formulario, setFormulario] = useState<Formulario>(formularioInicial);
+  const [clientes, setClientes] = useState<ClienteCadastrado[]>([]);
+  const [carregandoClientes, setCarregandoClientes] = useState(true);
+  const [clienteIdSelecionado, setClienteIdSelecionado] = useState("");
+  const [salvandoProposta, setSalvandoProposta] = useState(false);
+  const [mensagemSalvamento, setMensagemSalvamento] = useState("");
+  const [gerandoPDF, setGerandoPDF] = useState(false);
+  const [gerandoPDFCelular, setGerandoPDFCelular] = useState(false);
+  const [processandoFoto, setProcessandoFoto] = useState<number | null>(null);
+  const [instalacoes, setInstalacoes] = useState<InstalacaoPortfolio[]>(instalacoesIniciais);
+  const [modulos, setModulos] = useState<Equipamento[]>(modulosPadrao);
+  const [inversores, setInversores] = useState<Equipamento[]>(inversoresPadrao);
+  const [microinversores, setMicroinversores] = useState<Equipamento[]>(microinversoresPadrao);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previewCelularRef = useRef<HTMLDivElement>(null);
 
-const PreviewProposta = forwardRef<HTMLDivElement, PreviewPropostaProps>(
-  function PreviewProposta({ dados, modo = "normal" }, ref) {
-    const consumo = Math.max(numero(dados.consumo), 0);
-    const geracaoMedia = Math.max(numero(dados.geracao), 0);
-    const contaAtual = Math.max(numero(dados.valorConta), 0);
-    const investimento = Math.max(numero(dados.valorProposta), 0);
+  useEffect(() => {
+    async function carregarClientes() {
+      setCarregandoClientes(true);
+      const { data, error } = await supabase
+        .from("clientes")
+        .select("id,nome,telefone,cidade,endereco,cpf_cnpj")
+        .order("nome", { ascending: true });
 
-    const quantidadeModulos = Math.max(Math.round(numero(dados.quantidadeModulos)), 0);
-    const quantidadeInversores = Math.max(Math.round(numero(dados.quantidadeInversores)), 1);
+      if (error) {
+        console.error("Erro ao carregar clientes:", error);
+        setClientes([]);
+      } else {
+        setClientes((data ?? []) as ClienteCadastrado[]);
+      }
+      setCarregandoClientes(false);
+    }
 
-    const dadosGrafico = meses.map((mes, indice) => ({
-      mes,
-      consumo,
-      geracao: geracaoMedia * fatoresAracaju[indice],
+    void carregarClientes();
+  }, []);
+
+  useEffect(() => {
+    try {
+      const salvos = localStorage.getItem("choqueseg-equipamentos");
+      if (!salvos) return;
+      const dados = JSON.parse(salvos) as { modulos?: Equipamento[]; inversores?: Equipamento[]; microinversores?: Equipamento[] };
+      if (dados.modulos?.length) setModulos(dados.modulos);
+      if (dados.inversores?.length) setInversores(dados.inversores);
+      if (dados.microinversores?.length) setMicroinversores(dados.microinversores);
+    } catch (erro) {
+      console.error("Não foi possível carregar os equipamentos:", erro);
+    }
+  }, []);
+
+  function salvarEquipamentos(novosModulos: Equipamento[], novosInversores: Equipamento[], novosMicroinversores: Equipamento[]) {
+    localStorage.setItem("choqueseg-equipamentos", JSON.stringify({ modulos: novosModulos, inversores: novosInversores, microinversores: novosMicroinversores }));
+  }
+
+  const listaInversores = formulario.tipoInversor === "Microinversor" ? microinversores : inversores;
+  const moduloSelecionado = modulos.find((item) => item.id === formulario.moduloId);
+  const inversorSelecionado = listaInversores.find((item) => item.id === formulario.inversorId);
+
+  const potenciaCalculada = useMemo(() => {
+    if (formulario.modoSistema !== "personalizado") return formulario.potencia;
+    const quantidade = numero(formulario.quantidadeModulos);
+    const watts = numero(moduloSelecionado?.potencia || "");
+    if (!quantidade || !watts) return "";
+    return `${((quantidade * watts) / 1000).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kWp`;
+  }, [formulario.modoSistema, formulario.potencia, formulario.quantidadeModulos, moduloSelecionado]);
+
+  const calculos = useMemo(() => {
+    const valorBase = numero(formulario.valorProposta);
+    const percentualCartao = numero(formulario.percentualCartao);
+    const parcelasCartao = Math.max(Math.round(numero(formulario.parcelasCartao)), 1);
+    const percentualFinanciamento = numero(formulario.percentualFinanciamento);
+    const parcelasFinanciamento = Math.max(Math.round(numero(formulario.parcelasFinanciamento)), 1);
+    const totalCartao = valorBase * (1 + percentualCartao / 100);
+    const totalFinanciamento = valorBase * (1 + percentualFinanciamento / 100);
+    return {
+      valorBase, totalCartao, parcelasCartao,
+      parcelaCartao: totalCartao / parcelasCartao,
+      totalFinanciamento, parcelasFinanciamento,
+      parcelaFinanciamento: totalFinanciamento / parcelasFinanciamento,
+    };
+  }, [formulario.valorProposta, formulario.percentualCartao, formulario.parcelasCartao, formulario.percentualFinanciamento, formulario.parcelasFinanciamento]);
+
+  function selecionarCliente(clienteId: string) {
+    setClienteIdSelecionado(clienteId);
+    const cliente = clientes.find((item) => item.id === clienteId);
+    if (!cliente) {
+      setFormulario((anterior) => ({
+        ...anterior,
+        nome: "",
+        telefone: "",
+        cidade: "",
+      }));
+      return;
+    }
+
+    setFormulario((anterior) => ({
+      ...anterior,
+      nome: cliente.nome ?? "",
+      telefone: cliente.telefone ?? "",
+      cidade: cliente.cidade ?? "",
     }));
+  }
 
-    const maiorValor = Math.max(
-      ...dadosGrafico.flatMap((item) => [item.consumo, item.geracao]),
-      1,
+  function atualizarCampo(campo: keyof Formulario, valor: string) {
+    setFormulario((anterior) => ({ ...anterior, [campo]: valor }));
+  }
+
+  function mudarModo(modoSistema: Formulario["modoSistema"]) {
+    setFormulario((anterior) => ({ ...formularioInicial, nome: anterior.nome, telefone: anterior.telefone, cidade: anterior.cidade, consumo: anterior.consumo, valorConta: anterior.valorConta, percentualCartao: anterior.percentualCartao, parcelasCartao: anterior.parcelasCartao, percentualFinanciamento: anterior.percentualFinanciamento, parcelasFinanciamento: anterior.parcelasFinanciamento, modoSistema }));
+  }
+
+  function selecionarKit(kitId: string) {
+    const kit = kits.find((item) => item.id === kitId);
+    if (!kit) {
+      setFormulario((anterior) => ({ ...anterior, kitId: "", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "", quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "" }));
+      return;
+    }
+    setFormulario((anterior) => ({ ...anterior, kitId: kit.id, geracao: kit.geracao, potencia: kit.potencia, quantidadeModulos: kit.quantidadeModulos, moduloId: kit.moduloId, quantidadeInversores: kit.quantidadeInversores, inversorId: kit.inversorId, tipoInversor: kit.tipoInversor, valorProposta: kit.valor }));
+  }
+
+  function adicionarEquipamento(tipo: "modulo" | "inversor" | "microinversor") {
+    const marca = window.prompt("Marca do equipamento:")?.trim();
+    if (!marca) return;
+    const modelo = window.prompt("Modelo do equipamento:")?.trim() || "";
+    const potencia = window.prompt("Potência (ex.: 630 W ou 6 kW):")?.trim();
+    if (!potencia) return;
+    const id = `${tipo}-${Date.now()}`;
+    const novo: Equipamento = { id, marca, modelo, potencia };
+    if (tipo === "modulo") {
+      const bifacial = window.confirm("Este módulo é bifacial?");
+      novo.bifacial = bifacial;
+      const novaLista = [...modulos, novo];
+      setModulos(novaLista);
+      salvarEquipamentos(novaLista, inversores, microinversores);
+      atualizarCampo("moduloId", id);
+    } else if (tipo === "inversor") {
+      const novaLista = [...inversores, novo];
+      setInversores(novaLista);
+      salvarEquipamentos(modulos, novaLista, microinversores);
+      atualizarCampo("inversorId", id);
+    } else {
+      const novaLista = [...microinversores, novo];
+      setMicroinversores(novaLista);
+      salvarEquipamentos(modulos, inversores, novaLista);
+      atualizarCampo("inversorId", id);
+    }
+  }
+
+  function atualizarInstalacao(
+    indice: number,
+    campo: keyof InstalacaoPortfolio,
+    valor: string,
+  ) {
+    setInstalacoes((anteriores) =>
+      anteriores.map((instalacao, posicao) =>
+        posicao === indice ? { ...instalacao, [campo]: valor } : instalacao,
+      ),
+    );
+  }
+
+  async function escolherFoto(indice: number, arquivo?: File) {
+    if (!arquivo) return;
+
+    try {
+      setProcessandoFoto(indice);
+      const fotoComprimida = await comprimirImagem(arquivo);
+      atualizarInstalacao(indice, "foto", fotoComprimida);
+    } catch (erro) {
+      console.error("Erro ao carregar foto:", erro);
+      alert(erro instanceof Error ? erro.message : "Não foi possível carregar a foto.");
+    } finally {
+      setProcessandoFoto(null);
+    }
+  }
+
+  function removerFoto(indice: number) {
+    atualizarInstalacao(indice, "foto", "");
+  }
+
+  const dadosPreview: DadosPreview = {
+    nome: formulario.nome, telefone: formulario.telefone, cidade: formulario.cidade,
+    consumo: formulario.consumo, valorConta: formulario.valorConta, geracao: formulario.geracao,
+    potencia: formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia,
+    quantidadeModulos: formulario.quantidadeModulos,
+    marcaModulo: moduloSelecionado?.marca || "",
+    modeloModulo: moduloSelecionado?.modelo || "",
+    potenciaModulo: moduloSelecionado?.potencia || "",
+    moduloBifacial: Boolean(moduloSelecionado?.bifacial),
+    quantidadeInversores: formulario.quantidadeInversores,
+    marcaInversor: inversorSelecionado?.marca || "",
+    modeloInversor: inversorSelecionado?.modelo || "",
+    potenciaInversor: inversorSelecionado?.potencia || "",
+    tipoInversor: formulario.tipoInversor,
+    valorProposta: calculos.valorBase > 0 ? dinheiro(calculos.valorBase) : formulario.valorProposta,
+    parcelasCartao: calculos.parcelasCartao,
+    totalCartao: calculos.totalCartao > 0 ? dinheiro(calculos.totalCartao) : "—",
+    parcelaCartao: calculos.parcelaCartao > 0 ? dinheiro(calculos.parcelaCartao) : "—",
+    parcelasFinanciamento: calculos.parcelasFinanciamento,
+    totalFinanciamento: calculos.totalFinanciamento > 0 ? dinheiro(calculos.totalFinanciamento) : "—",
+    parcelaFinanciamento: calculos.parcelaFinanciamento > 0 ? dinheiro(calculos.parcelaFinanciamento) : "—",
+    instalacoes,
+  };
+
+  async function salvarPropostaNaNuvem() {
+    if (!clienteIdSelecionado) {
+      setMensagemSalvamento("Selecione um cliente cadastrado antes de salvar.");
+      return;
+    }
+
+    if (!formulario.quantidadeModulos || !moduloSelecionado) {
+      setMensagemSalvamento("Informe os módulos do sistema antes de salvar.");
+      return;
+    }
+
+    if (!inversorSelecionado) {
+      setMensagemSalvamento("Selecione o inversor antes de salvar.");
+      return;
+    }
+
+    try {
+      setSalvandoProposta(true);
+      setMensagemSalvamento("");
+
+      const potenciaSistemaTexto =
+        formulario.modoSistema === "personalizado"
+          ? potenciaCalculada
+          : formulario.potencia;
+
+      const formaPagamento = [
+        calculos.parcelaCartao > 0
+          ? `Cartão: ${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}`
+          : "",
+        calculos.parcelaFinanciamento > 0
+          ? `Financiamento: ${calculos.parcelasFinanciamento}x de ${dinheiro(calculos.parcelaFinanciamento)}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+
+      const payload = {
+        cliente_id: clienteIdSelecionado,
+        cliente_nome: formulario.nome.trim(),
+        tipo_proposta: "energia_solar",
+        consumo_medio: numero(formulario.consumo) || null,
+        potencia_sistema_kwp: numero(potenciaSistemaTexto) || null,
+        quantidade_modulos: numero(formulario.quantidadeModulos) || null,
+        potencia_modulo: moduloSelecionado.potencia || null,
+        marca_modulo: moduloSelecionado.marca || null,
+        modelo_modulo: moduloSelecionado.modelo || null,
+        quantidade_inversores: numero(formulario.quantidadeInversores) || 1,
+        marca_inversor: inversorSelecionado.marca || null,
+        modelo_inversor: inversorSelecionado.modelo || null,
+        potencia_inversor: inversorSelecionado.potencia || null,
+        valor_total: calculos.valorBase || null,
+        forma_pagamento: formaPagamento || null,
+        observacoes: `Tipo de inversor: ${formulario.tipoInversor}`,
+        status: "Enviada",
+        criada_em: new Date().toISOString(),
+      };
+
+      const { error } = await supabase.from("propostas").insert(payload);
+      if (error) throw error;
+
+      setMensagemSalvamento(
+        "Proposta salva na nuvem. Ela já poderá preencher o contrato deste cliente.",
+      );
+    } catch (erro) {
+      console.error("Erro ao salvar proposta solar:", erro);
+      setMensagemSalvamento(
+        erro instanceof Error
+          ? `Erro ao salvar proposta: ${erro.message}`
+          : "Não foi possível salvar a proposta na nuvem.",
+      );
+    } finally {
+      setSalvandoProposta(false);
+    }
+  }
+
+  async function gerarPdfDaProposta(
+    raiz: HTMLDivElement | null,
+    nomeArquivo: string,
+    modoCelular = false,
+  ) {
+    if (!raiz) {
+      alert("Não foi possível localizar a proposta.");
+      return;
+    }
+
+    const paginas = Array.from(
+      raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
     );
 
-    const economiaMensal = contaAtual > 0 ? contaAtual * 0.9 : 0;
-    const economiaAnual = economiaMensal * 12;
-    const payback =
-      economiaAnual > 0 && investimento > 0 ? investimento / economiaAnual : 0;
+    if (paginas.length === 0) {
+      alert("Nenhuma página da proposta foi encontrada.");
+      return;
+    }
 
-    const descricaoModulo =
-      quantidadeModulos > 0
-        ? textoSeguro(
-            String(quantidadeModulos).padStart(2, "0"),
-            plural(quantidadeModulos, "módulo", "módulos"),
-            dados.moduloBifacial
-              ? plural(quantidadeModulos, "bifacial", "bifaciais")
-              : "",
-            dados.marcaModulo,
-            dados.modeloModulo,
-            dados.potenciaModulo,
-          )
-        : "—";
+    const larguraPdf = 210;
+    const alturaPdf = 297;
 
-    const nomeInversor =
-      dados.tipoInversor === "Microinversor"
-        ? plural(quantidadeInversores, "microinversor", "microinversores")
-        : plural(quantidadeInversores, "inversor", "inversores");
+    // Tamanho fixo de captura para TODAS as páginas.
+    // Isso impede que uma página seja reduzida por ter proporção diferente.
+    const larguraCaptura = 794;
+    const alturaCaptura = 1120;
 
-    const descricaoInversor = textoSeguro(
-      String(quantidadeInversores).padStart(2, "0"),
-      nomeInversor,
-      dados.marcaInversor,
-      dados.modeloInversor,
-      dados.potenciaInversor,
-    );
+    const pdf = new jsPDF({
+      orientation: "portrait",
+      unit: "mm",
+      format: "a4",
+      compress: true,
+    });
 
-    const mensagemWhatsApp = [
-      "Olá, CHOQUESEG! Analisei minha proposta de energia solar e quero fechar o serviço.",
-      "",
-      `Cliente: ${dados.nome || "Não informado"}`,
-      `Cidade: ${dados.cidade || "Não informada"}`,
-      `Telefone: ${dados.telefone || "Não informado"}`,
-      `Consumo médio: ${dados.consumo ? `${dados.consumo} kWh` : "Não informado"}`,
-      `Sistema: ${dados.potencia || "Não informado"}`,
-      `Geração estimada: ${dados.geracao ? `${dados.geracao} kWh/mês` : "Não informada"}`,
-      `Valor da proposta: ${dados.valorProposta || "Não informado"}`,
-      "",
-      "Quero dar continuidade ao fechamento.",
-    ].join("\n");
+    for (let indice = 0; indice < paginas.length; indice += 1) {
+      const pagina = paginas[indice];
 
-    const linkWhatsApp = `https://wa.me/${WHATSAPP_CHOQUESEG}?text=${encodeURIComponent(
-      mensagemWhatsApp,
-    )}`;
+      await esperarImagens(pagina);
 
-    return (
-      <div
-        ref={ref}
-        data-modo-proposta={modo}
-        className={`grid items-start gap-5 ${
-          modo === "celular" ? "mx-auto max-w-[430px] grid-cols-1" : "2xl:grid-cols-2"
-        }`}
-      >
-        {/* PÁGINA 1 */}
-        <Pagina numeroPagina={1} totalPaginas={3}>
-          <section className="relative min-h-[315px] overflow-hidden rounded-[24px] border border-yellow-400 bg-black">
-            <img
-              src={TELHADO}
-              alt="Telhado com sistema de energia solar"
-              className="absolute inset-0 h-full w-full object-cover object-center"
-            />
-            <img
-              src={FOTO_EQUIPE}
-              alt="Profissional da ChoqueSeg apontando para o telhado solar"
-              className="absolute bottom-0 right-0 h-full w-[52%] object-cover object-center"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/75 to-black/20" />
-            <div className="absolute inset-y-0 right-0 w-[52%] bg-gradient-to-l from-black/5 via-transparent to-black/80" />
+      const estiloAnterior = {
+        width: pagina.style.width,
+        minWidth: pagina.style.minWidth,
+        maxWidth: pagina.style.maxWidth,
+        height: pagina.style.height,
+        minHeight: pagina.style.minHeight,
+        maxHeight: pagina.style.maxHeight,
+        overflow: pagina.style.overflow,
+        boxSizing: pagina.style.boxSizing,
+      };
 
-            <div className="relative z-10 min-h-[315px] p-6 sm:p-8">
-              <div className="flex items-start gap-5">
-                <img
-                  src={LOGO}
-                  alt="Brasão oficial da ChoqueSeg"
-                  className="h-auto w-[175px] shrink-0 object-contain sm:w-[210px]"
-                />
+      try {
+        pagina.style.width = `${larguraCaptura}px`;
+        pagina.style.minWidth = `${larguraCaptura}px`;
+        pagina.style.maxWidth = `${larguraCaptura}px`;
+        pagina.style.height = `${alturaCaptura}px`;
+        pagina.style.minHeight = `${alturaCaptura}px`;
+        pagina.style.maxHeight = `${alturaCaptura}px`;
+        pagina.style.overflow = "hidden";
+        pagina.style.boxSizing = "border-box";
 
-                <div className="pt-3">
-                  <p className="text-sm font-black uppercase tracking-[0.3em] text-white">
-                    Proposta comercial
-                  </p>
-                  <h1 className="mt-2 text-5xl font-black uppercase leading-[0.88] text-white sm:text-7xl">
-                    Energia
-                    <br />
-                    Solar
-                  </h1>
-                </div>
-              </div>
+        const canvas = await html2canvas(pagina, {
+          scale: modoCelular ? 2 : 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#ffffff",
+          logging: false,
+          imageTimeout: 8000,
+          removeContainer: true,
+          width: larguraCaptura,
+          height: alturaCaptura,
+          windowWidth: larguraCaptura,
+          windowHeight: alturaCaptura,
+          scrollX: 0,
+          scrollY: 0,
+        });
 
-              <div className="mt-4 max-w-[86%]">
-                <p className="text-2xl font-black leading-tight text-yellow-400 sm:text-3xl">
-                  Deixe o Sol pagar pelo seu conforto.
+        const qualidade = modoCelular ? 0.82 : 0.86;
+        const imagem = canvas.toDataURL("image/jpeg", qualidade);
+
+        if (indice > 0) {
+          pdf.addPage("a4", "portrait");
+        }
+
+        pdf.setFillColor(255, 255, 255);
+        pdf.rect(0, 0, larguraPdf, alturaPdf, "F");
+
+        // Todas as páginas ocupam exatamente a mesma área A4.
+        pdf.addImage(
+          imagem,
+          "JPEG",
+          0,
+          0,
+          larguraPdf,
+          alturaPdf,
+          undefined,
+          "MEDIUM",
+        );
+
+        canvas.width = 1;
+        canvas.height = 1;
+      } finally {
+        pagina.style.width = estiloAnterior.width;
+        pagina.style.minWidth = estiloAnterior.minWidth;
+        pagina.style.maxWidth = estiloAnterior.maxWidth;
+        pagina.style.height = estiloAnterior.height;
+        pagina.style.minHeight = estiloAnterior.minHeight;
+        pagina.style.maxHeight = estiloAnterior.maxHeight;
+        pagina.style.overflow = estiloAnterior.overflow;
+        pagina.style.boxSizing = estiloAnterior.boxSizing;
+      }
+    }
+
+    pdf.save(nomeArquivo);
+  }
+
+  async function gerarPDF() {
+    try {
+      setGerandoPDF(true);
+      const nomeCliente = formulario.nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+      await gerarPdfDaProposta(
+        previewRef.current,
+        `Proposta-CHOQUESEG-${nomeCliente}.pdf`,
+        false,
+      );
+      alert("PDF gerado com sucesso.");
+    } catch (erro) {
+      console.error("Erro ao gerar PDF:", erro);
+      alert(
+        erro instanceof Error ? erro.message : "Não foi possível gerar o PDF.",
+      );
+    } finally {
+      setGerandoPDF(false);
+    }
+  }
+
+  async function gerarPDFCelular() {
+    try {
+      setGerandoPDFCelular(true);
+      const nomeCliente = formulario.nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+      await gerarPdfDaProposta(
+        previewCelularRef.current,
+        `Proposta-CHOQUESEG-Celular-${nomeCliente}.pdf`,
+        true,
+      );
+      alert("PDF para celular gerado com sucesso.");
+    } catch (erro) {
+      console.error("Erro ao gerar PDF para celular:", erro);
+      alert(
+        erro instanceof Error
+          ? erro.message
+          : "Não foi possível gerar o PDF para celular.",
+      );
+    } finally {
+      setGerandoPDFCelular(false);
+    }
+  }
+
+  function abrirWhatsApp() {
+    const telefone = formulario.telefone.replace(/\D/g, "");
+    const destino = telefone.length >= 10 ? `55${telefone}` : "";
+    const mensagem = encodeURIComponent(`Olá, ${formulario.nome || "cliente"}! Segue a proposta comercial de energia solar preparada pela ChoqueSeg.`);
+    window.open(`https://wa.me/${destino}?text=${mensagem}`, "_blank", "noopener,noreferrer");
+  }
+
+  return (
+    <main className="min-h-screen bg-zinc-950 text-white">
+      <header className="sticky top-0 z-30 border-b border-yellow-400/40 bg-black/95 px-4 py-3 backdrop-blur md:px-6">
+        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3">
+          <div><p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-400">ChoqueSeg</p><h1 className="text-lg font-black uppercase md:text-2xl">Gerador de proposta solar</h1></div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={salvarPropostaNaNuvem} disabled={salvandoProposta} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{salvandoProposta ? "Salvando..." : "Salvar proposta"}</button>
+            <button type="button" onClick={gerarPDF} disabled={gerandoPDF} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Gerando PDF..." : "Gerar PDF"}</button>
+            <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDFCelular} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
+            <button type="button" onClick={abrirWhatsApp} className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white">Abrir WhatsApp</button>
+            <button type="button" onClick={() => { setFormulario(formularioInicial); setInstalacoes(instalacoesIniciais); setClienteIdSelecionado(""); setMensagemSalvamento(""); }} className="rounded-xl border border-zinc-600 px-4 py-3 text-sm font-black uppercase text-white">Limpar</button>
+          </div>
+        </div>
+      </header>
+
+      {mensagemSalvamento && (
+        <div className="border-b border-yellow-400/20 bg-yellow-400/10 px-4 py-3 text-center text-sm font-bold text-yellow-300">
+          {mensagemSalvamento}
+        </div>
+      )}
+
+      <div className="mx-auto grid max-w-[1800px] gap-5 p-4 xl:grid-cols-[380px_minmax(0,1fr)] xl:p-6">
+        <aside className="self-start rounded-3xl border border-yellow-400/50 bg-black p-5 xl:sticky xl:top-24">
+          <div className="mb-6 text-center"><img src="/imagens/logo/brasao-choqueseg.png" alt="Brasão ChoqueSeg" className="mx-auto h-32 w-32 object-contain" /><p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">Preenchimento da proposta</p></div>
+          <div className="space-y-5">
+            <SecaoFormulario titulo="Cliente">
+              <Select
+                titulo={carregandoClientes ? "Cliente — carregando..." : "Cliente cadastrado"}
+                valor={clienteIdSelecionado}
+                aoAlterar={selecionarCliente}
+                opcoes={clientes.map((cliente) => ({
+                  valor: cliente.id,
+                  texto: cliente.nome,
+                }))}
+              />
+              <Campo titulo="Telefone" valor={formulario.telefone} somenteLeitura aoAlterar={() => undefined} />
+              <Campo titulo="Cidade" valor={formulario.cidade} somenteLeitura aoAlterar={() => undefined} />
+              <div className="grid grid-cols-2 gap-3"><Campo titulo="Consumo kWh" valor={formulario.consumo} aoAlterar={(v) => atualizarCampo("consumo", v)} /><Campo titulo="Conta mensal" valor={formulario.valorConta} aoAlterar={(v) => atualizarCampo("valorConta", v)} /></div>
+            </SecaoFormulario>
+
+            <SecaoFormulario titulo="Sistema solar">
+              <div className="grid grid-cols-2 gap-2"><BotaoModo ativo={formulario.modoSistema === "kit"} texto="Kit pronto" aoClicar={() => mudarModo("kit")} /><BotaoModo ativo={formulario.modoSistema === "personalizado"} texto="Personalizado" aoClicar={() => mudarModo("personalizado")} /></div>
+              {formulario.modoSistema === "kit" && <Select titulo="Kit" valor={formulario.kitId} aoAlterar={selecionarKit} opcoes={kits.map((kit) => ({ valor: kit.id, texto: `${kit.nome} — ${kit.valor}` }))} />}
+              <div className="grid grid-cols-2 gap-3"><Campo titulo="Geração/mês" valor={formulario.geracao} somenteLeitura={formulario.modoSistema === "kit"} aoAlterar={(v) => atualizarCampo("geracao", v)} /><Campo titulo="Potência" valor={formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia} somenteLeitura aoAlterar={() => undefined} /></div>
+              <div className="grid grid-cols-2 gap-3"><Campo titulo="Qtd. módulos" valor={formulario.quantidadeModulos} somenteLeitura={formulario.modoSistema === "kit"} aoAlterar={(v) => atualizarCampo("quantidadeModulos", v)} /><Select titulo="Tipo de inversor" valor={formulario.tipoInversor} aoAlterar={(v) => setFormulario((anterior) => ({ ...anterior, tipoInversor: v as Formulario["tipoInversor"], inversorId: "" }))} opcoes={[{ valor: "String", texto: "Inversor String" }, { valor: "Microinversor", texto: "Microinversor" }]} /></div>
+              <SelectComAdicionar titulo="Módulo" valor={formulario.moduloId} aoAlterar={(v) => atualizarCampo("moduloId", v)} opcoes={modulos.map((item) => ({ valor: item.id, texto: `${item.marca} ${item.modelo} ${item.potencia}` }))} aoAdicionar={() => adicionarEquipamento("modulo")} />
+              <div className="grid grid-cols-[100px_1fr] gap-3"><Campo titulo="Quantidade" valor={formulario.quantidadeInversores} aoAlterar={(v) => atualizarCampo("quantidadeInversores", v)} /><SelectComAdicionar titulo={formulario.tipoInversor === "Microinversor" ? "Microinversor" : "Inversor"} valor={formulario.inversorId} aoAlterar={(v) => atualizarCampo("inversorId", v)} opcoes={listaInversores.map((item) => ({ valor: item.id, texto: `${item.marca} ${item.modelo} ${item.potencia}` }))} aoAdicionar={() => adicionarEquipamento(formulario.tipoInversor === "Microinversor" ? "microinversor" : "inversor")} /></div>
+              <Campo titulo="Valor da proposta" valor={formulario.valorProposta} aoAlterar={(v) => atualizarCampo("valorProposta", v)} />
+            </SecaoFormulario>
+
+            <SecaoFormulario titulo="Pagamento">
+              <p className="text-xs leading-relaxed text-zinc-400">Os percentuais aparecem somente no gerador. O cliente verá o valor final e as parcelas.</p>
+              <PagamentoFormulario titulo="Cartão" percentual={formulario.percentualCartao} parcelas={formulario.parcelasCartao} parcelaCalculada={calculos.parcelaCartao} aoPercentual={(v) => atualizarCampo("percentualCartao", v)} aoParcelas={(v) => atualizarCampo("parcelasCartao", v)} />
+              <PagamentoFormulario titulo="Financiamento" percentual={formulario.percentualFinanciamento} parcelas={formulario.parcelasFinanciamento} parcelaCalculada={calculos.parcelaFinanciamento} aoPercentual={(v) => atualizarCampo("percentualFinanciamento", v)} aoParcelas={(v) => atualizarCampo("parcelasFinanciamento", v)} />
+            </SecaoFormulario>
+
+            <SecaoFormulario titulo="Fotos das instalações">
+              <div className="rounded-2xl border border-yellow-400 bg-yellow-400/10 p-3">
+                <p className="text-sm font-black uppercase text-yellow-400">
+                  Escolha as fotos que aparecerão nesta proposta
                 </p>
-                <p className="mt-4 text-2xl font-black text-white sm:text-3xl">
-                  {dados.nome || "Nome do cliente"}
-                </p>
-                <p className="mt-1 text-base font-bold text-zinc-200 sm:text-lg">
-                  {[dados.cidade, dados.telefone].filter(Boolean).join(" • ") ||
-                    "Cidade • Telefone"}
+                <p className="mt-1 text-xs leading-relaxed text-zinc-300">
+                  Em cada bloco, selecione uma foto do celular, informe a cidade/local e escreva a descrição da instalação.
                 </p>
               </div>
-            </div>
-          </section>
-
-          <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Indicador titulo="Potência" valor={dados.potencia || "—"} />
-            <Indicador titulo="Geração/mês" valor={dados.geracao ? `${dados.geracao} kWh` : "—"} />
-            <Indicador
-              titulo="Módulos"
-              valor={quantidadeModulos ? `${quantidadeModulos} × ${dados.potenciaModulo}` : "—"}
-            />
-            <Indicador
-              titulo={dados.tipoInversor === "Microinversor" ? "Microinversor" : "Inversor"}
-              valor={dados.potenciaInversor || "—"}
-            />
-          </section>
-
-          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-zinc-950 p-5">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
-                  Geração x consumo
-                </p>
-                <h2 className="mt-1 text-2xl font-black uppercase text-white sm:text-3xl">
-                  Perfil anual estimado
-                </h2>
-              </div>
-              <div className="flex gap-4 text-xs font-bold text-white">
-                <Legenda classe="bg-white" texto="Consumo" />
-                <Legenda classe="bg-yellow-400" texto="Geração" />
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-12 items-end gap-1.5 sm:gap-2">
-              {dadosGrafico.map((item) => (
-                <div key={item.mes} className="flex min-w-0 flex-col items-center">
-                  <div className="mb-1 h-4 text-[9px] font-black text-yellow-400">
-                    {Math.round(item.geracao).toLocaleString("pt-BR")}
-                  </div>
-                  <div className="flex h-[145px] w-full items-end justify-center gap-0.5 sm:gap-1">
-                    <Barra altura={(item.consumo / maiorValor) * 100} classe="bg-white" />
-                    <Barra altura={(item.geracao / maiorValor) * 100} classe="bg-yellow-400" />
-                  </div>
-                  <span className="mt-2 text-[10px] font-black uppercase text-white">
-                    {item.mes}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="mt-4 grid gap-3 sm:grid-cols-[1fr_0.72fr]">
-            <div className="rounded-[22px] bg-yellow-400 p-4 text-black">
-              <p className="text-xs font-black uppercase tracking-[0.22em]">
-                Investimento à vista
+              <p className="text-xs leading-relaxed text-zinc-400">
+                Escolha até quatro fotos do celular e informe o local e a descrição.
+                As imagens são reduzidas automaticamente para o PDF não travar.
               </p>
-              <strong className="mt-1 block text-4xl font-black">
-                {dados.valorProposta || "—"}
-              </strong>
-            </div>
-            <div className="flex items-center justify-center rounded-[22px] border border-yellow-400 bg-black p-4 text-center">
-              <strong className="text-2xl font-black uppercase leading-tight text-yellow-400">
-                Economia de até 90%
-              </strong>
-            </div>
-          </section>
-        </Pagina>
 
-        {/* PÁGINA 2 */}
-        <Pagina numeroPagina={2} totalPaginas={3}>
-          <header className="flex items-center justify-between rounded-[22px] bg-black p-5">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-400">
-                CHOQUESEG
-              </p>
-              <h2 className="mt-1 text-3xl font-black uppercase text-white">
-                Seu investimento, seu retorno
-              </h2>
-            </div>
-            <img
-              src={LOGO}
-              alt="Brasão oficial da CHOQUESEG"
-              className="h-auto w-[88px] object-contain"
-            />
-          </header>
+              <div className="space-y-4">
+                {instalacoes.map((instalacao, indice) => (
+                  <div
+                    key={indice}
+                    className="rounded-2xl border border-zinc-700 bg-zinc-900 p-3"
+                  >
+                    <p className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-yellow-400">
+                      Instalação {indice + 1}
+                    </p>
 
-          <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Metrica titulo="Conta atual" valor={contaAtual > 0 ? dinheiro(contaAtual) : "—"} />
-            <Metrica
-              titulo="Economia mensal"
-              valor={economiaMensal > 0 ? dinheiro(economiaMensal) : "Até 90%"}
-            />
-            <Metrica
-              titulo="Economia anual"
-              valor={economiaAnual > 0 ? dinheiro(economiaAnual) : "—"}
-            />
-            <Metrica titulo="Payback" valor={payback > 0 ? `${payback.toFixed(1)} anos` : "—"} />
-          </section>
+                    <label className="block cursor-pointer">
+                      <span className="mb-2 block rounded-xl border border-dashed border-yellow-400/70 bg-black px-3 py-3 text-center text-sm font-black uppercase text-yellow-400">
+                        {processandoFoto === indice
+                          ? "Processando foto..."
+                          : instalacao.foto
+                            ? "Trocar foto"
+                            : "Escolher foto"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={processandoFoto !== null}
+                        onChange={(evento) => {
+                          const arquivo = evento.target.files?.[0];
+                          void escolherFoto(indice, arquivo);
+                          evento.currentTarget.value = "";
+                        }}
+                      />
+                    </label>
 
-          <section className="mt-4 rounded-[22px] border border-zinc-300 bg-white p-5 text-zinc-950">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-zinc-500">
-              O que está incluso na sua instalação
-            </p>
-
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              <ItemIncluso texto={descricaoModulo} />
-              <ItemIncluso texto={descricaoInversor || "Inversor solar"} />
-              <ItemIncluso texto="Estrutura metálica de fixação em alumínio" />
-              <ItemIncluso texto="Cabos solares CC e conectores MC4" />
-              <ItemIncluso texto="Proteção elétrica no lado CA" />
-              <ItemIncluso texto="Instalação completa do sistema fotovoltaico" />
-              <ItemIncluso texto="Projeto elétrico e documentação técnica" />
-              <ItemIncluso texto="Homologação junto à Energisa" />
-              <ItemIncluso texto="Configuração do aplicativo de monitoramento" />
-            </div>
-          </section>
-
-          <section className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-yellow-400 bg-yellow-50 p-5">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-zinc-950">
-                Observações importantes
-              </p>
-              <p className="mt-3 text-sm font-bold leading-relaxed text-zinc-700">
-                Padrão de entrada, adequações na instalação elétrica interna da residência
-                e eventuais correções estruturais no telhado não estão inclusos nesta proposta
-                e são de responsabilidade do cliente.
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-zinc-950 p-5 text-white">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-yellow-400">
-                Etapas do seu projeto
-              </p>
-              <div className="mt-4 space-y-3">
-                <EtapaProjeto numero="1" texto="Análise técnica e definição do sistema" />
-                <EtapaProjeto numero="2" texto="Projeto elétrico e documentação" />
-                <EtapaProjeto numero="3" texto="Homologação junto à Energisa" />
-                <EtapaProjeto numero="4" texto="Instalação e configuração do monitoramento" />
-                <EtapaProjeto numero="5" texto="Entrega técnica e suporte pós-instalação" />
-              </div>
-            </div>
-          </section>
-
-          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-black p-5 text-center">
-            <p className="text-sm font-black uppercase tracking-[0.18em] text-white">
-              Projeto completo, instalação profissional e acompanhamento técnico
-            </p>
-            <p className="mt-2 text-2xl font-black uppercase text-yellow-400">
-              Do orçamento à homologação
-            </p>
-          </section>
-        </Pagina>
-
-        {/* PÁGINA 3 */}
-        <Pagina numeroPagina={3} totalPaginas={3}>
-          <header className="flex items-center justify-between rounded-[22px] bg-black p-5">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-400">
-                CHOQUESEG
-              </p>
-              <h2 className="mt-1 text-3xl font-black uppercase text-white">
-                Qualidade que você pode comprovar
-              </h2>
-            </div>
-            <img
-              src={LOGO}
-              alt="Brasão oficial da CHOQUESEG"
-              className="h-auto w-[88px] object-contain"
-            />
-          </header>
-
-          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-black p-4">
-            <p className="mb-4 text-center text-sm font-black uppercase tracking-[0.12em] text-white">
-              Algumas instalações
-              <span className="block text-yellow-400">realizadas pela CHOQUESEG</span>
-            </p>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              {dados.instalacoes.slice(0, 4).map((instalacao, indice) => (
-                <figure
-                  key={`${indice}-${instalacao.foto}-${instalacao.cidade || "Local da instalação"}`}
-                  className="overflow-hidden rounded-xl border border-yellow-400 bg-zinc-950"
-                >
-                  <div className="aspect-[16/9] w-full overflow-hidden bg-zinc-900">
-                    {instalacao.foto ? (
-                      <>
+                    {instalacao.foto && (
+                      <div className="mt-3 overflow-hidden rounded-xl border border-zinc-700">
                         <img
                           src={instalacao.foto}
-                          alt=""
-                          className="h-full w-full object-cover object-center"
-                          onError={(evento) => {
-                            evento.currentTarget.style.display = "none";
-                            const substituto =
-                              evento.currentTarget.nextElementSibling as HTMLElement | null;
-                            if (substituto) substituto.style.display = "flex";
-                          }}
+                          alt={`Prévia da instalação ${indice + 1}`}
+                          className="aspect-[16/7] w-full object-cover"
                         />
-                        <div className="hidden h-full items-center justify-center px-4 text-center text-xs font-black uppercase text-zinc-500">
-                          Foto não encontrada. Escolha outra imagem no gerador.
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex h-full items-center justify-center px-4 text-center text-xs font-black uppercase text-zinc-500">
-                        Adicione uma foto desta instalação no gerador
+                        <button
+                          type="button"
+                          onClick={() => removerFoto(indice)}
+                          className="w-full bg-red-700 px-3 py-2 text-xs font-black uppercase text-white"
+                        >
+                          Remover foto
+                        </button>
                       </div>
                     )}
-                  </div>
 
-                  <figcaption className="flex items-start gap-2 border-t border-yellow-400 bg-black px-3 py-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-400 text-sm font-black text-black">
-                      ●
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-black leading-tight text-white">
-                        {instalacao.cidade || "Local da instalação"}
-                      </p>
-                      <p className="mt-0.5 text-xs font-bold leading-tight text-yellow-400">
-                        {instalacao.descricao ||
-                          "Sistema fotovoltaico instalado pela CHOQUESEG"}
-                      </p>
+                    <div className="mt-3 space-y-3">
+                      <Campo
+                        titulo="Cidade / local"
+                        valor={instalacao.cidade}
+                        aoAlterar={(valor) => atualizarInstalacao(indice, "cidade", valor)}
+                      />
+                      <Campo
+                        titulo="Descrição"
+                        valor={instalacao.descricao}
+                        aoAlterar={(valor) => atualizarInstalacao(indice, "descricao", valor)}
+                      />
                     </div>
-                  </figcaption>
-                </figure>
-              ))}
-            </div>
-          </section>
-
-          <section className="mt-4">
-            <h3 className="text-2xl font-black uppercase text-zinc-950">
-              Condições de pagamento
-            </h3>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Pagamento
-                titulo="Cartão"
-                destaque={`${dados.parcelasCartao}x de ${dados.parcelaCartao}`}
-                total={`Valor total: ${dados.totalCartao}`}
-              />
-              <Pagamento
-                titulo="Financiamento"
-                destaque={`${dados.parcelasFinanciamento}x de ${dados.parcelaFinanciamento}`}
-                total={`Valor total: ${dados.totalFinanciamento}`}
-              />
-            </div>
-          </section>
-
-          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-zinc-950 p-5">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <h3 className="text-xl font-black uppercase text-yellow-400">
-                  Por que escolher a CHOQUESEG
-                </h3>
-                <div className="mt-3 space-y-3">
-                  <Diferencial texto="Projeto, instalação e homologação completa" />
-                  <Diferencial texto="Equipe especializada e atendimento próximo" />
-                </div>
+                  </div>
+                ))}
               </div>
-
-              <div>
-                <h3 className="text-xl font-black uppercase text-yellow-400">
-                  Garantias
-                </h3>
-                <div className="mt-3 space-y-3">
-                  <Diferencial texto="Garantia dos equipamentos conforme o fabricante" />
-                  <Diferencial texto="Garantia e suporte técnico da instalação" />
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <footer className="mt-4 flex items-center justify-between gap-4 rounded-[22px] bg-black p-5">
-            <div className="min-w-0 flex-1">
-              <p className="text-xl font-black uppercase leading-tight text-yellow-400 sm:text-2xl">
-                Vamos deixar o Sol pagar pelo seu conforto?
-              </p>
-              <div className="mt-3 flex flex-col gap-3 sm:max-w-[340px]">
-                <a
-                  href={linkWhatsApp}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black transition hover:scale-[1.02] hover:bg-yellow-300"
-                >
-                  ✅ Quero fechar com a CHOQUESEG
-                </a>
-
-                <a
-                  href="https://g.page/r/CTbFpWqrl-nMEBO/review"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-xl border-2 border-yellow-400 px-4 py-3 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
-                >
-                  ⭐ Avaliar a CHOQUESEG no Google
-                </a>
-              </div>
-              <p className="mt-3 text-base font-bold text-white">
-                (79) 9.9939-0653 • @choqueseg
-              </p>
-            </div>
-            <img
-              src={LOGO}
-              alt="Brasão oficial da CHOQUESEG"
-              className="h-auto w-[92px] shrink-0 object-contain"
-            />
-          </footer>
-        </Pagina>
+            </SecaoFormulario>
+          </div>
+        </aside>
+        <section className="min-w-0"><PreviewProposta ref={previewRef} dados={dadosPreview} /></section>
+        <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[794px]">
+          <PreviewProposta ref={previewCelularRef} dados={dadosPreview} modo="celular" />
+        </div>
       </div>
-    );
-  },
-);
-
-export default PreviewProposta;
-
-function Pagina({
-  children,
-  numeroPagina,
-  totalPaginas,
-}: {
-  children: React.ReactNode;
-  numeroPagina?: number;
-  totalPaginas?: number;
-}) {
-  return (
-    <article
-      data-pagina-proposta
-      className="relative min-h-[1120px] w-full overflow-hidden rounded-[28px] border border-yellow-400 bg-zinc-100 p-6 shadow-2xl [[data-modo-proposta=celular]_&]:min-h-[760px] [[data-modo-proposta=celular]_&]:rounded-[22px] [[data-modo-proposta=celular]_&]:p-4"
-    >
-      <div className="min-h-[1030px] [[data-modo-proposta=celular]_&]:min-h-[700px]">
-        {children}
-      </div>
-
-      {numeroPagina && totalPaginas && (
-        <footer className="absolute bottom-4 left-0 right-0 text-center text-xs font-bold text-zinc-500">
-          Página {numeroPagina} de {totalPaginas}
-        </footer>
-      )}
-    </article>
+    </main>
   );
 }
 
-function Indicador({ titulo, valor }: { titulo: string; valor: string }) {
-  return (
-    <div className="rounded-2xl border border-yellow-400 bg-black p-3 text-center">
-      <span className="block text-[10px] font-black uppercase tracking-wide text-zinc-300 sm:text-xs">{titulo}</span>
-      <strong className="mt-2 block text-lg font-black text-yellow-400 sm:text-xl">{valor}</strong>
-    </div>
-  );
-}
-
-function Legenda({ classe, texto }: { classe: string; texto: string }) {
-  return (
-    <span className="flex items-center gap-1.5">
-      <span className={`h-3 w-3 rounded-sm ${classe}`} />
-      {texto}
-    </span>
-  );
-}
-
-function Barra({ altura, classe }: { altura: number; classe: string }) {
-  return <div className={`w-[42%] min-w-[4px] rounded-t-sm ${classe}`} style={{ height: `${Math.max(altura, 3)}%` }} />;
-}
-
-function Pagamento({ titulo, destaque, total }: { titulo: string; destaque: string; total: string }) {
-  return (
-    <div className="rounded-[22px] border border-yellow-400 bg-zinc-950 p-5">
-      <p className="text-sm font-black uppercase tracking-[0.18em] text-yellow-400">{titulo}</p>
-      <strong className="mt-2 block text-2xl font-black text-white">{destaque}</strong>
-      <p className="mt-2 text-sm font-bold text-zinc-300">{total}</p>
-    </div>
-  );
-}
-
-function Metrica({ titulo, valor }: { titulo: string; valor: string }) {
-  const valorLongo = valor.length >= 11;
-
-  return (
-    <div className="flex min-h-[92px] min-w-0 flex-col items-center justify-center rounded-2xl bg-yellow-400 p-3 text-center text-black">
-      <span className="block text-[10px] font-black uppercase leading-tight sm:text-xs">
-        {titulo}
-      </span>
-      <strong
-        className={`mt-2 block max-w-full break-words font-black leading-none ${
-          valorLongo ? "text-sm sm:text-base" : "text-base sm:text-lg"
-        }`}
-      >
-        {valor}
-      </strong>
-    </div>
-  );
-}
-
-function Diferencial({ texto }: { texto: string }) {
-  return (
-    <div className="flex items-start gap-3">
-      <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-yellow-400 text-sm font-black text-black">✓</span>
-      <p className="text-sm font-bold leading-snug text-white sm:text-base">{texto}</p>
-    </div>
-  );
-}
-
-function ItemIncluso({ texto }: { texto: string }) {
-  return (
-    <div className="flex items-start gap-3 rounded-xl bg-zinc-100 px-3 py-2.5">
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-yellow-400 text-xs font-black text-black">
-        ✓
-      </span>
-      <p className="text-sm font-bold leading-snug text-zinc-900">{texto}</p>
-    </div>
-  );
-}
-
-function EtapaProjeto({ numero, texto }: { numero: string; texto: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-yellow-400 text-xs font-black text-black">
-        {numero}
-      </span>
-      <p className="text-sm font-bold leading-snug text-white">{texto}</p>
-    </div>
-  );
-}
-
-function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
-  return (
-    <div className="border-b border-zinc-200 pb-3 last:border-b-0">
-      <span className="block text-xs font-black uppercase text-zinc-500">{rotulo}</span>
-      <strong className="mt-1 block text-base text-zinc-950 sm:text-lg">{valor}</strong>
-    </div>
-  );
-}
+function SecaoFormulario({ titulo, children }: { titulo: string; children: React.ReactNode }) { return <section className="space-y-3 border-t border-zinc-800 pt-5 first:border-t-0 first:pt-0"><h2 className="text-sm font-black uppercase tracking-[0.18em] text-yellow-400">{titulo}</h2>{children}</section>; }
+function Campo({ titulo, valor, aoAlterar, somenteLeitura = false }: { titulo: string; valor: string; aoAlterar: (valor: string) => void; somenteLeitura?: boolean }) { return <label className="block"><span className="mb-1.5 block text-sm font-bold text-zinc-200">{titulo}</span><input type="text" value={valor} readOnly={somenteLeitura} autoComplete="off" onChange={(e) => aoAlterar(e.target.value)} className={`w-full rounded-xl border px-3 py-3 text-white outline-none ${somenteLeitura ? "cursor-not-allowed border-zinc-800 bg-zinc-800 text-zinc-400" : "border-zinc-700 bg-zinc-900 focus:border-yellow-400"}`} /></label>; }
+function Select({ titulo, valor, aoAlterar, opcoes }: { titulo: string; valor: string; aoAlterar: (valor: string) => void; opcoes: { valor: string; texto: string }[] }) { return <label className="block"><span className="mb-1.5 block text-sm font-bold text-zinc-200">{titulo}</span><select value={valor} onChange={(e) => aoAlterar(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"><option value="">Selecione</option>{opcoes.map((opcao) => <option key={opcao.valor} value={opcao.valor}>{opcao.texto}</option>)}</select></label>; }
+function SelectComAdicionar({ titulo, valor, aoAlterar, opcoes, aoAdicionar }: { titulo: string; valor: string; aoAlterar: (valor: string) => void; opcoes: { valor: string; texto: string }[]; aoAdicionar: () => void }) { return <div><div className="mb-1.5 flex items-center justify-between gap-2"><span className="text-sm font-bold text-zinc-200">{titulo}</span><button type="button" onClick={aoAdicionar} className="text-xs font-black uppercase text-yellow-400 hover:text-yellow-300">+ Adicionar</button></div><select value={valor} onChange={(e) => aoAlterar(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"><option value="">Selecione</option>{opcoes.map((opcao) => <option key={opcao.valor} value={opcao.valor}>{opcao.texto}</option>)}</select></div>; }
+function PagamentoFormulario({ titulo, percentual, parcelas, parcelaCalculada, aoPercentual, aoParcelas }: { titulo: string; percentual: string; parcelas: string; parcelaCalculada: number; aoPercentual: (valor: string) => void; aoParcelas: (valor: string) => void }) { return <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-3"><p className="mb-3 font-black uppercase text-yellow-400">{titulo}</p><div className="grid grid-cols-2 gap-3"><Campo titulo="Acréscimo %" valor={percentual} aoAlterar={aoPercentual} /><Campo titulo="Parcelas" valor={parcelas} aoAlterar={aoParcelas} /></div><p className="mt-3 text-sm font-bold">{Math.max(Math.round(numero(parcelas)), 1)}x de <span className="text-yellow-400">{parcelaCalculada > 0 ? dinheiro(parcelaCalculada) : "—"}</span></p></div>; }
+function BotaoModo({ ativo, texto, aoClicar }: { ativo: boolean; texto: string; aoClicar: () => void }) { return <button type="button" onClick={aoClicar} className={`rounded-xl border px-3 py-3 text-sm font-black uppercase ${ativo ? "border-yellow-400 bg-yellow-400 text-black" : "border-zinc-700 bg-zinc-900 text-white"}`}>{texto}</button>; }
