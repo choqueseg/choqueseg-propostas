@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
+import { createClient } from "@/utils/supabase/client";
 import PreviewProposta, { DadosPreview, type InstalacaoPortfolio } from "./PreviewProposta";
+
+const supabase = createClient();
 import {
   type Equipamento,
   inversoresPadrao,
@@ -23,6 +26,17 @@ type KitSolar = {
   valor: string;
 };
 
+type Cliente = {
+  id: string | number;
+  nome: string;
+  telefone?: string | null;
+  cidade?: string | null;
+  endereco?: string | null;
+  cpf_cnpj?: string | null;
+  cpf?: string | null;
+  cnpj?: string | null;
+};
+
 const kits: KitSolar[] = [
   { id: "300", nome: "Kit 300 kWh", geracao: "300", potencia: "2,50 kWp", quantidadeModulos: "4", moduloId: "jinko-630", quantidadeInversores: "2", inversorId: "hoymiles-1600", tipoInversor: "Microinversor", valor: "R$ 6.999,00" },
   { id: "400", nome: "Kit 400 kWh", geracao: "400", potencia: "2,84 kWp", quantidadeModulos: "4", moduloId: "jinko-710", quantidadeInversores: "2", inversorId: "hoymiles-2000", tipoInversor: "Microinversor", valor: "R$ 8.399,00" },
@@ -38,9 +52,12 @@ const kits: KitSolar[] = [
 ];
 
 type Formulario = {
+  clienteId: string;
   nome: string;
   telefone: string;
   cidade: string;
+  enderecoCliente: string;
+  cpfCnpj: string;
   consumo: string;
   valorConta: string;
   kitId: string;
@@ -66,7 +83,8 @@ type Formulario = {
 };
 
 const formularioInicial: Formulario = {
-  nome: "", telefone: "", cidade: "", consumo: "", valorConta: "", kitId: "",
+  clienteId: "", nome: "", telefone: "", cidade: "", enderecoCliente: "", cpfCnpj: "",
+  consumo: "", valorConta: "", kitId: "",
   modoSistema: "kit", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "",
   quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "",
   percentualCartao: "", parcelasCartao: "18", percentualFinanciamento: "", parcelasFinanciamento: "84",
@@ -169,8 +187,13 @@ export default function FormularioProposta() {
   const [modulos, setModulos] = useState<Equipamento[]>(modulosPadrao);
   const [inversores, setInversores] = useState<Equipamento[]>(inversoresPadrao);
   const [microinversores, setMicroinversores] = useState<Equipamento[]>(microinversoresPadrao);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [carregandoClientes, setCarregandoClientes] = useState(true);
+  const [erroClientes, setErroClientes] = useState("");
+  const [escalaPreview, setEscalaPreview] = useState(1);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewCelularRef = useRef<HTMLDivElement>(null);
+  const previewAreaRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     try {
@@ -183,6 +206,60 @@ export default function FormularioProposta() {
     } catch (erro) {
       console.error("Não foi possível carregar os equipamentos:", erro);
     }
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarClientes() {
+      setCarregandoClientes(true);
+      setErroClientes("");
+
+      const { data, error } = await supabase
+        .from("clientes")
+        .select("*")
+        .order("nome", { ascending: true });
+
+      if (!ativo) return;
+
+      if (error) {
+        console.error("Erro ao carregar clientes:", error);
+        setErroClientes(`Não foi possível carregar os clientes: ${error.message}`);
+        setClientes([]);
+      } else {
+        setClientes((data ?? []) as Cliente[]);
+      }
+
+      setCarregandoClientes(false);
+    }
+
+    void carregarClientes();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const elemento = previewAreaRef.current;
+    if (!elemento) return;
+
+    const ajustar = () => {
+      const larguraDisponivel = Math.max(elemento.clientWidth - 16, 280);
+      const novaEscala = Math.min(1, Math.max(0.32, larguraDisponivel / 794));
+      setEscalaPreview(novaEscala);
+    };
+
+    ajustar();
+
+    const observador = new ResizeObserver(ajustar);
+    observador.observe(elemento);
+    window.addEventListener("resize", ajustar);
+
+    return () => {
+      observador.disconnect();
+      window.removeEventListener("resize", ajustar);
+    };
   }, []);
 
   useEffect(() => {
@@ -261,10 +338,50 @@ export default function FormularioProposta() {
     }
   }
 
+  function selecionarCliente(clienteId: string) {
+    const cliente = clientes.find((item) => String(item.id) === clienteId);
+
+    if (!cliente) {
+      setFormulario((anterior) => ({
+        ...anterior,
+        clienteId: "",
+        nome: "",
+        telefone: "",
+        cidade: "",
+        enderecoCliente: "",
+        cpfCnpj: "",
+      }));
+      return;
+    }
+
+    const cpfCnpj =
+      cliente.cpf_cnpj?.trim() ||
+      cliente.cpf?.trim() ||
+      cliente.cnpj?.trim() ||
+      "";
+
+    setFormulario((anterior) => ({
+      ...anterior,
+      clienteId: String(cliente.id),
+      nome: cliente.nome ?? "",
+      telefone: cliente.telefone ?? "",
+      cidade: cliente.cidade ?? "",
+      enderecoCliente: cliente.endereco ?? "",
+      cpfCnpj,
+    }));
+  }
+
   function mudarModo(modoSistema: Formulario["modoSistema"]) {
     setFormulario((anterior) => ({
       ...formularioInicial,
-      nome: anterior.nome, telefone: anterior.telefone, cidade: anterior.cidade, consumo: anterior.consumo, valorConta: anterior.valorConta,
+      clienteId: anterior.clienteId,
+      nome: anterior.nome,
+      telefone: anterior.telefone,
+      cidade: anterior.cidade,
+      enderecoCliente: anterior.enderecoCliente,
+      cpfCnpj: anterior.cpfCnpj,
+      consumo: anterior.consumo,
+      valorConta: anterior.valorConta,
       percentualCartao: anterior.percentualCartao, parcelasCartao: anterior.parcelasCartao,
       percentualFinanciamento: anterior.percentualFinanciamento, parcelasFinanciamento: anterior.parcelasFinanciamento,
       enderecoLoja: anterior.enderecoLoja,
@@ -373,6 +490,19 @@ export default function FormularioProposta() {
     temaPDF: formulario.temaPDF,
   };
 
+  function adicionarLinkFechamento(pdf: jsPDF, indicePagina: number) {
+    if (indicePagina !== 2) return;
+
+    const url =
+      "https://wa.me/5579999390653?text=" +
+      encodeURIComponent(
+        "Olá, quero fechar minha proposta de Energia Solar com a CHOQUESEG.",
+      );
+
+    // Área clicável sobre o botão da página 3.
+    pdf.link(126, 251, 73, 21, { url });
+  }
+
  async function gerarPDF() {
   const raiz = previewCelularRef.current;
 
@@ -446,6 +576,8 @@ export default function FormularioProposta() {
         "FAST",
       );
 
+      adicionarLinkFechamento(pdf, indice);
+
       canvas.width = 1;
       canvas.height = 1;
     }
@@ -518,6 +650,7 @@ export default function FormularioProposta() {
         pdf.addImage(
           imagem, "JPEG", 0, 0, larguraPdf, alturaPdf, undefined, "FAST",
         );
+        adicionarLinkFechamento(pdf, indice);
 
         canvas.width = 1;
         canvas.height = 1;
@@ -545,80 +678,32 @@ export default function FormularioProposta() {
 
   function montarMensagemWhatsApp() {
     const nome = formulario.nome.trim() || "cliente";
-    const potenciaSistema = formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia;
-    const tipoInversor = formulario.tipoInversor === "Microinversor" ? "microinversor" : "inversor";
-    const qtdInversores = Math.max(Math.round(numero(formulario.quantidadeInversores)), 1);
-    const descricaoInversor = [
-      `${qtdInversores} ${qtdInversores === 1 ? tipoInversor : `${tipoInversor}es`}`,
-      inversorSelecionado?.marca,
-      inversorSelecionado?.modelo,
-      inversorSelecionado?.potencia,
-    ].filter(Boolean).join(" ");
+    const potenciaSistema =
+      formulario.modoSistema === "personalizado"
+        ? potenciaCalculada
+        : formulario.potencia;
 
-    const descricaoModulos = [
-      formulario.quantidadeModulos ? `${formulario.quantidadeModulos} módulos` : "",
-      moduloSelecionado?.marca,
-      moduloSelecionado?.modelo,
-      moduloSelecionado?.potencia,
-    ].filter(Boolean).join(" ");
+    const valorVista =
+      calculos.valorBase > 0
+        ? dinheiro(calculos.valorBase)
+        : formulario.valorProposta || "—";
 
-    const consumoInformado = numero(formulario.consumo);
-    const geracaoInformada = numero(formulario.geracao);
-    const contaInformada = numero(formulario.valorConta);
+    const cartao =
+      calculos.parcelaCartao > 0
+        ? `${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}`
+        : `até ${calculos.parcelasCartao}x`;
 
-    const tarifaMediaMensagem =
-      consumoInformado > 0 && contaInformada > 0
-        ? contaInformada / consumoInformado
-        : 0;
-
-    const energiaCompensadaMensagem =
-      consumoInformado > 0 && geracaoInformada > 0
-        ? Math.min(consumoInformado, geracaoInformada)
-        : 0;
-
-    const economiaEnergeticaMensagem =
-      tarifaMediaMensagem > 0
-        ? energiaCompensadaMensagem * tarifaMediaMensagem
-        : 0;
-
-    const economiaMensagem =
-      contaInformada > 0
-        ? Math.min(economiaEnergeticaMensagem, contaInformada * 0.9)
-        : 0;
-
-    const percentualEconomiaMensagem =
-      contaInformada > 0 && economiaMensagem > 0
-        ? economiaMensagem / contaInformada
-        : 0;
-
-    const linhas = [
+    return [
       `Olá, ${nome}! Segue sua proposta de Energia Solar da CHOQUESEG.`,
-      "",
-      formulario.consumo ? `Consumo informado: ${formulario.consumo} kWh/mês.` : "",
-      formulario.geracao ? `Geração estimada: aproximadamente ${formulario.geracao} kWh/mês.` : "",
+      formulario.geracao ? `Geração estimada: ${formulario.geracao} kWh/mês.` : "",
       potenciaSistema ? `Potência do sistema: ${potenciaSistema}.` : "",
-      descricaoModulos ? `Módulos: ${descricaoModulos}.` : "",
-      descricaoInversor ? `Equipamento de conversão: ${descricaoInversor}.` : "",
-      "",
-      economiaMensagem > 0
-        ? `Economia estimada: ${dinheiro(economiaMensagem)}/mês (${Math.round(percentualEconomiaMensagem * 100)}% da conta informada).`
-        : "",
-      calculos.valorBase > 0 ? `Valor à vista: ${dinheiro(calculos.valorBase)}.` : "",
-      calculos.totalCartao > 0
-        ? `Cartão: ${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)} (total ${dinheiro(calculos.totalCartao)}).`
-        : "",
-      calculos.totalFinanciamento > 0
-        ? `Financiamento: ${calculos.parcelasFinanciamento}x de ${dinheiro(calculos.parcelaFinanciamento)} (total ${dinheiro(calculos.totalFinanciamento)}), sujeito à análise e aprovação.`
-        : "",
-      "",
-      "Todos os detalhes do sistema, equipamentos, garantias e condições estão no PDF da proposta.",
-      "Fico à disposição para qualquer dúvida.",
-    ];
-
-    return linhas.filter((linha, indice, todas) => {
-      if (linha !== "") return true;
-      return indice > 0 && todas[indice - 1] !== "";
-    }).join("\n").trim();
+      `Valor à vista: ${valorVista}.`,
+      `Cartão: ${cartao}.`,
+      "Financiamento em até 84 meses, sujeito à análise e aprovação.",
+      "Materiais, equipamentos e garantias estão detalhados no PDF.",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   function abrirWhatsApp() {
@@ -689,13 +774,39 @@ export default function FormularioProposta() {
           <div className="mb-6 text-center"><img src="/imagens/logo/brasao-choqueseg.png" alt="Brasão ChoqueSeg" className="mx-auto h-24 w-24 object-contain" /><p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">Preenchimento da proposta</p></div>
           <div className="space-y-5">
             <SecaoFormulario titulo="Cliente">
+              <Select
+                titulo={carregandoClientes ? "Carregando clientes..." : "Cliente cadastrado"}
+                valor={formulario.clienteId}
+                aoAlterar={selecionarCliente}
+                opcoes={clientes.map((cliente) => ({
+                  valor: String(cliente.id),
+                  texto: cliente.nome,
+                }))}
+              />
+
+              {erroClientes && (
+                <div className="rounded-xl border border-red-500/60 bg-red-950/30 px-3 py-2 text-xs font-bold text-red-200">
+                  {erroClientes}
+                </div>
+              )}
+
+              <p className="text-xs leading-relaxed text-zinc-400">
+                Ao selecionar um cliente, nome, telefone, cidade, endereço e CPF/CNPJ são preenchidos automaticamente. Todos continuam editáveis.
+              </p>
+
               <Campo titulo="Nome" valor={formulario.nome} aoAlterar={(v) => atualizarCampo("nome", v)} />
-              <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
-              <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
+              <div className="grid grid-cols-2 gap-3">
+                <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
+                <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
+              </div>
+              <Campo titulo="Endereço do cliente" valor={formulario.enderecoCliente} aoAlterar={(v) => atualizarCampo("enderecoCliente", v)} />
+              <Campo titulo="CPF / CNPJ" valor={formulario.cpfCnpj} aoAlterar={(v) => atualizarCampo("cpfCnpj", v)} />
+
               <div className="grid grid-cols-2 gap-3">
                 <Campo titulo="Consumo kWh" valor={formulario.consumo} aoAlterar={(v) => atualizarCampo("consumo", v)} />
                 <Campo titulo="Conta mensal (R$)" valor={formulario.valorConta} aoAlterar={(v) => atualizarCampo("valorConta", v)} />
               </div>
+
               {validacaoEconomia.mostrar && (
                 <div className="rounded-xl border border-red-500/70 bg-red-950/40 px-3 py-2 text-xs font-bold leading-relaxed text-red-200">
                   ⚠ {validacaoEconomia.texto}
@@ -814,9 +925,15 @@ export default function FormularioProposta() {
             </SecaoFormulario>
           </div>
         </aside>
-        <section className="min-w-0 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-2">
-          <div className="flex w-full justify-center">
-            <div className="origin-top [zoom:0.68] 2xl:[zoom:0.78] min-[1750px]:[zoom:0.88] min-[1900px]:[zoom:0.96]">
+        <section
+          ref={previewAreaRef}
+          className="min-w-0 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-2"
+        >
+          <div className="flex w-full justify-center overflow-hidden">
+            <div
+              className="w-[794px] origin-top"
+              style={{ zoom: escalaPreview } as CSSProperties}
+            >
               <PreviewProposta ref={previewRef} dados={dadosPreview} />
             </div>
           </div>
