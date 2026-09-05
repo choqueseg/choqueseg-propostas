@@ -1,14 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 import {
   MovimentacaoEstoque,
   ProdutoEstoque,
   TipoMovimentacaoEstoque,
 } from "./types";
 
-const CHAVE_MOVIMENTACOES =
-  "choqueseg-estoque-movimentacoes";
+const supabase = createClient();
 
 const tiposMovimentacao: TipoMovimentacaoEstoque[] = [
   "Entrada",
@@ -16,6 +16,25 @@ const tiposMovimentacao: TipoMovimentacaoEstoque[] = [
   "Ajuste positivo",
   "Ajuste negativo",
 ];
+
+function movimentacaoBancoParaApp(item: any): MovimentacaoEstoque {
+  return {
+    id: String(item.id),
+    produtoId: String(item.produto_id),
+    produtoNome: item.produto_nome ?? "",
+    tipo: item.tipo as TipoMovimentacaoEstoque,
+    quantidade: Number(item.quantidade ?? 0),
+    custoUnitario:
+      item.custo_unitario == null ? undefined : Number(item.custo_unitario),
+    motivo: item.motivo ?? "",
+    servicoId: item.servico_id ? String(item.servico_id) : undefined,
+    clienteNome: item.cliente_nome ?? undefined,
+    fornecedor: item.fornecedor ?? undefined,
+    data: item.data ?? "",
+    criadoEm: item.criado_em ?? "",
+    criadoPor: item.criado_por ?? "CHOQUESEG PRO",
+  };
+}
 
 export default function MovimentacoesEstoque({
   produtos,
@@ -26,91 +45,73 @@ export default function MovimentacoesEstoque({
   aoAtualizarProdutos: (produtos: ProdutoEstoque[]) => void;
   usuarioNome?: string;
 }) {
-  const [movimentacoes, setMovimentacoes] = useState<
-    MovimentacaoEstoque[]
-  >([]);
-  const [dadosCarregados, setDadosCarregados] = useState(false);
-
+  const [movimentacoes, setMovimentacoes] = useState<MovimentacaoEstoque[]>([]);
   const [produtoId, setProdutoId] = useState("");
-  const [tipo, setTipo] =
-    useState<TipoMovimentacaoEstoque>("Entrada");
+  const [tipo, setTipo] = useState<TipoMovimentacaoEstoque>("Entrada");
   const [quantidade, setQuantidade] = useState("");
   const [motivo, setMotivo] = useState("");
   const [fornecedor, setFornecedor] = useState("");
   const [clienteNome, setClienteNome] = useState("");
-  const [data, setData] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [data, setData] = useState(new Date().toISOString().slice(0, 10));
   const [mensagem, setMensagem] = useState("");
-
+  const [salvando, setSalvando] = useState(false);
   const [filtroProduto, setFiltroProduto] = useState("Todos");
-  const [filtroTipo, setFiltroTipo] = useState<
-    "Todos" | TipoMovimentacaoEstoque
-  >("Todos");
+  const [filtroTipo, setFiltroTipo] = useState<"Todos" | TipoMovimentacaoEstoque>("Todos");
 
   useEffect(() => {
-    const dadosSalvos = localStorage.getItem(
-      CHAVE_MOVIMENTACOES,
-    );
+    let ativo = true;
 
-    if (dadosSalvos) {
-      try {
-        const dados = JSON.parse(dadosSalvos);
+    async function carregar() {
+      const { data, error } = await supabase
+        .from("estoque_movimentacoes")
+        .select("*")
+        .order("criado_em", { ascending: false });
 
-        setMovimentacoes(
-          Array.isArray(dados) ? dados : [],
-        );
-      } catch {
-        localStorage.removeItem(CHAVE_MOVIMENTACOES);
-        setMovimentacoes([]);
-        setMensagem(
-          "O histórico de movimentações estava inválido e foi reiniciado.",
-        );
+      if (!ativo) return;
+
+      if (error) {
+        console.error("Erro ao carregar movimentações:", error);
+        setMensagem(`Erro ao carregar movimentações: ${error.message}`);
+        return;
       }
+
+      setMovimentacoes((data ?? []).map(movimentacaoBancoParaApp));
     }
 
-    setDadosCarregados(true);
+    void carregar();
+
+    const canal = supabase
+      .channel("estoque-movimentacoes-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "estoque_movimentacoes" },
+        () => void carregar(),
+      )
+      .subscribe();
+
+    return () => {
+      ativo = false;
+      void supabase.removeChannel(canal);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!dadosCarregados) return;
+  const produtosAtivos = useMemo(
+    () => produtos.filter((produto) => produto.ativo).sort((a, b) => a.nome.localeCompare(b.nome)),
+    [produtos],
+  );
 
-    localStorage.setItem(
-      CHAVE_MOVIMENTACOES,
-      JSON.stringify(movimentacoes),
-    );
-  }, [movimentacoes, dadosCarregados]);
-
-  const produtosAtivos = useMemo(() => {
-    return produtos
-      .filter((produto) => produto.ativo)
-      .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [produtos]);
-
-  const produtoSelecionado = useMemo(() => {
-    return produtos.find(
-      (produto) => produto.id === produtoId,
-    );
-  }, [produtos, produtoId]);
+  const produtoSelecionado = useMemo(
+    () => produtos.find((produto) => produto.id === produtoId),
+    [produtos, produtoId],
+  );
 
   const movimentacoesFiltradas = useMemo(() => {
-    return [...movimentacoes]
+    return movimentacoes
       .filter((movimentacao) => {
-        const atendeProduto =
-          filtroProduto === "Todos" ||
-          movimentacao.produtoId === filtroProduto;
-
-        const atendeTipo =
-          filtroTipo === "Todos" ||
-          movimentacao.tipo === filtroTipo;
-
-        return atendeProduto && atendeTipo;
-      })
-      .sort((a, b) =>
-        `${b.data}-${b.criadoEm}`.localeCompare(
-          `${a.data}-${a.criadoEm}`,
-        ),
-      );
+        const produtoOk = filtroProduto === "Todos" || movimentacao.produtoId === filtroProduto;
+        const tipoOk = filtroTipo === "Todos" || movimentacao.tipo === filtroTipo;
+        return produtoOk && tipoOk;
+      });
   }, [movimentacoes, filtroProduto, filtroTipo]);
 
   const resumo = useMemo(() => {
@@ -120,379 +121,201 @@ export default function MovimentacoesEstoque({
     let ajustesNegativos = 0;
 
     for (const movimentacao of movimentacoes) {
-      if (movimentacao.tipo === "Entrada") {
-        entradas += movimentacao.quantidade;
-      } else if (movimentacao.tipo === "Saída") {
-        saidas += movimentacao.quantidade;
-      } else if (
-        movimentacao.tipo === "Ajuste positivo"
-      ) {
-        ajustesPositivos += movimentacao.quantidade;
-      } else {
-        ajustesNegativos += movimentacao.quantidade;
-      }
+      if (movimentacao.tipo === "Entrada") entradas += movimentacao.quantidade;
+      else if (movimentacao.tipo === "Saída") saidas += movimentacao.quantidade;
+      else if (movimentacao.tipo === "Ajuste positivo") ajustesPositivos += movimentacao.quantidade;
+      else ajustesNegativos += movimentacao.quantidade;
     }
 
-    return {
-      entradas,
-      saidas,
-      ajustesPositivos,
-      ajustesNegativos,
-    };
+    return { entradas, saidas, ajustesPositivos, ajustesNegativos };
   }, [movimentacoes]);
 
-  function salvarMovimentacao(
-    evento: FormEvent<HTMLFormElement>,
-  ) {
+  async function salvarMovimentacao(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     setMensagem("");
 
-    const produto = produtos.find(
-      (item) => item.id === produtoId,
-    );
-
+    const produto = produtos.find((item) => item.id === produtoId);
     const quantidadeNumerica = converterNumero(quantidade);
 
-    if (!produto) {
-      setMensagem("Selecione um produto.");
+    if (!produto) return setMensagem("Selecione um produto.");
+    if (quantidadeNumerica <= 0) return setMensagem("Informe uma quantidade válida.");
+    if (!motivo.trim()) return setMensagem("Informe o motivo da movimentação.");
+    if (!data) return setMensagem("Informe a data da movimentação.");
+
+    setSalvando(true);
+
+    const { error } = await supabase.rpc("registrar_movimentacao_estoque", {
+      p_produto_id: produto.id,
+      p_tipo: tipo,
+      p_quantidade: quantidadeNumerica,
+      p_motivo: motivo.trim(),
+      p_fornecedor: fornecedor.trim() || null,
+      p_cliente_nome: clienteNome.trim() || null,
+      p_servico_id: null,
+      p_criado_por: usuarioNome,
+      p_data: data,
+    });
+
+    setSalvando(false);
+
+    if (error) {
+      console.error("Erro ao registrar movimentação:", error);
+      setMensagem(error.message);
       return;
     }
 
-    if (!quantidadeNumerica || quantidadeNumerica <= 0) {
-      setMensagem("Informe uma quantidade válida.");
-      return;
-    }
-
-    if (!motivo.trim()) {
-      setMensagem("Informe o motivo da movimentação.");
-      return;
-    }
-
-    if (!data) {
-      setMensagem("Informe a data da movimentação.");
-      return;
-    }
-
-    const reduzEstoque =
-      tipo === "Saída" || tipo === "Ajuste negativo";
-
-    const aumentaEstoque =
-      tipo === "Entrada" || tipo === "Ajuste positivo";
-
-    const novaQuantidade = aumentaEstoque
-      ? produto.quantidadeAtual + quantidadeNumerica
-      : produto.quantidadeAtual - quantidadeNumerica;
-
-    if (reduzEstoque && novaQuantidade < 0) {
-      setMensagem(
-        `Estoque insuficiente. Disponível: ${produto.quantidadeAtual} ${produto.unidade}.`,
-      );
-      return;
-    }
-
+    const aumenta = tipo === "Entrada" || tipo === "Ajuste positivo";
     const produtosAtualizados = produtos.map((item) =>
       item.id === produto.id
         ? {
             ...item,
-            quantidadeAtual: novaQuantidade,
+            quantidadeAtual:
+              item.quantidadeAtual + (aumenta ? quantidadeNumerica : -quantidadeNumerica),
           }
         : item,
     );
 
-    const novaMovimentacao: MovimentacaoEstoque = {
-      id: crypto.randomUUID(),
-      produtoId: produto.id,
-      produtoNome: produto.nome,
-      tipo,
-      quantidade: quantidadeNumerica,
-      custoUnitario: produto.custoUnitario,
-      motivo: motivo.trim(),
-      clienteNome: clienteNome.trim() || undefined,
-      fornecedor:
-        fornecedor.trim() ||
-        produto.fornecedor ||
-        undefined,
-      data,
-      criadoEm: new Date().toISOString(),
-      criadoPor: usuarioNome,
-    };
-
     aoAtualizarProdutos(produtosAtualizados);
-
-    setMovimentacoes((atuais) => [
-      novaMovimentacao,
-      ...atuais,
-    ]);
-
     setProdutoId("");
     setQuantidade("");
     setMotivo("");
     setFornecedor("");
     setClienteNome("");
-    setMensagem("Movimentação registrada com sucesso.");
+    setMensagem("Movimentação registrada na nuvem com sucesso.");
   }
 
-  function excluirMovimentacao(id: string) {
-    const confirmar = window.confirm(
-      "Excluir apenas o registro do histórico? Essa ação não altera novamente a quantidade do estoque.",
-    );
+  async function excluirMovimentacao(id: string) {
+    if (!window.confirm("Excluir somente este registro do histórico? O saldo do estoque não será alterado.")) return;
 
-    if (!confirmar) return;
+    const { error } = await supabase
+      .from("estoque_movimentacoes")
+      .delete()
+      .eq("id", id);
 
-    setMovimentacoes((atuais) =>
-      atuais.filter((item) => item.id !== id),
-    );
+    if (error) {
+      setMensagem(`Erro ao excluir histórico: ${error.message}`);
+      return;
+    }
+
+    setMovimentacoes((atuais) => atuais.filter((item) => item.id !== id));
   }
 
   return (
-    <section className="rounded-3xl border border-zinc-800 bg-black p-5">
-      <div>
-        <p className="text-xs font-black uppercase text-yellow-400">
-          Entradas e saídas
-        </p>
-
-        <h3 className="mt-1 text-2xl font-black uppercase text-white">
-          Movimentações de estoque
-        </h3>
-
-        <p className="mt-2 text-sm text-zinc-400">
-          Registre compras, materiais utilizados, devoluções e
-          ajustes de inventário.
-        </p>
-      </div>
-
+    <section className="space-y-5">
       {mensagem && (
-        <div className="mt-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">
+        <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">
           {mensagem}
         </div>
       )}
 
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <CardResumo
-          titulo="Entradas"
-          valor={resumo.entradas}
-        />
-
-        <CardResumo
-          titulo="Saídas"
-          valor={resumo.saidas}
-        />
-
-        <CardResumo
-          titulo="Ajustes positivos"
-          valor={resumo.ajustesPositivos}
-        />
-
-        <CardResumo
-          titulo="Ajustes negativos"
-          valor={resumo.ajustesNegativos}
-        />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <CardResumo titulo="Entradas" valor={resumo.entradas} />
+        <CardResumo titulo="Saídas" valor={resumo.saidas} />
+        <CardResumo titulo="Ajustes +" valor={resumo.ajustesPositivos} />
+        <CardResumo titulo="Ajustes -" valor={resumo.ajustesNegativos} />
       </div>
 
-      <form
-        onSubmit={salvarMovimentacao}
-        className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <form onSubmit={salvarMovimentacao} className="rounded-2xl border border-zinc-800 bg-black p-4">
+        <h3 className="text-lg font-black uppercase text-yellow-400">Nova movimentação</h3>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <CampoSelect
             label="Produto"
             valor={produtoId}
             onChange={setProdutoId}
             opcoes={[
-              {
-                valor: "",
-                nome: "Selecione um produto",
-              },
+              { valor: "", nome: "Selecione um produto" },
               ...produtosAtivos.map((produto) => ({
                 valor: produto.id,
-                nome: `${produto.nome} — estoque: ${produto.quantidadeAtual}`,
+                nome: `${produto.nome} — ${produto.quantidadeAtual} ${produto.unidade}`,
               })),
             ]}
           />
 
           <CampoSelect
-            label="Tipo de movimentação"
+            label="Tipo"
             valor={tipo}
-            onChange={(valor) =>
-              setTipo(valor as TipoMovimentacaoEstoque)
-            }
-            opcoes={tiposMovimentacao.map((item) => ({
-              valor: item,
-              nome: item,
-            }))}
+            onChange={(valor) => setTipo(valor as TipoMovimentacaoEstoque)}
+            opcoes={tiposMovimentacao.map((item) => ({ valor: item, nome: item }))}
           />
 
-          <CampoTexto
-            label="Quantidade"
-            valor={quantidade}
-            onChange={setQuantidade}
-            placeholder="Ex.: 10"
-            tipo="number"
-          />
-
-          <CampoTexto
-            label="Data"
-            valor={data}
-            onChange={setData}
-            tipo="date"
-          />
-
-          <CampoTexto
-            label="Motivo"
-            valor={motivo}
-            onChange={setMotivo}
-            placeholder="Ex.: Compra de fornecedor"
-          />
-
-          <CampoTexto
-            label="Fornecedor"
-            valor={fornecedor}
-            onChange={setFornecedor}
-            placeholder="Opcional"
-          />
-
-          <CampoTexto
-            label="Cliente"
-            valor={clienteNome}
-            onChange={setClienteNome}
-            placeholder="Usado em qual cliente?"
-          />
+          <CampoTexto label="Quantidade" valor={quantidade} onChange={setQuantidade} tipo="number" />
+          <CampoTexto label="Data" valor={data} onChange={setData} tipo="date" />
+          <CampoTexto label="Motivo" valor={motivo} onChange={setMotivo} placeholder="Ex.: Compra / uso em serviço" />
+          <CampoTexto label="Fornecedor" valor={fornecedor} onChange={setFornecedor} placeholder="Opcional" />
+          <CampoTexto label="Cliente" valor={clienteNome} onChange={setClienteNome} placeholder="Opcional" />
         </div>
 
         {produtoSelecionado && (
-          <div className="mt-4 rounded-xl border border-yellow-400/20 bg-black px-4 py-3 text-sm text-zinc-300">
-            Estoque atual:{" "}
-            <strong className="text-yellow-400">
-              {produtoSelecionado.quantidadeAtual}{" "}
-              {produtoSelecionado.unidade}
-            </strong>
-            {" · "}
-            Custo unitário:{" "}
-            <strong>
-              {formatarMoeda(
-                produtoSelecionado.custoUnitario,
-              )}
-            </strong>
+          <div className="mt-4 rounded-xl border border-yellow-400/20 bg-zinc-950 px-4 py-3 text-sm text-zinc-300">
+            Estoque atual: <strong className="text-yellow-400">{produtoSelecionado.quantidadeAtual} {produtoSelecionado.unidade}</strong>
+            {" · "}Custo: <strong>{formatarMoeda(produtoSelecionado.custoUnitario)}</strong>
           </div>
         )}
 
         <button
           type="submit"
-          className="mt-5 rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black"
+          disabled={salvando}
+          className="mt-4 rounded-xl bg-yellow-400 px-5 py-3 font-black uppercase text-black disabled:opacity-50"
         >
-          Registrar movimentação
+          {salvando ? "Registrando..." : "Registrar movimentação"}
         </button>
       </form>
 
-      <section className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-        <div className="grid gap-4 md:grid-cols-2">
+      <section className="rounded-2xl border border-zinc-800 bg-black p-4">
+        <div className="grid gap-3 md:grid-cols-2">
           <CampoSelect
             label="Filtrar por produto"
             valor={filtroProduto}
             onChange={setFiltroProduto}
             opcoes={[
-              {
-                valor: "Todos",
-                nome: "Todos os produtos",
-              },
-              ...produtos.map((produto) => ({
-                valor: produto.id,
-                nome: produto.nome,
-              })),
+              { valor: "Todos", nome: "Todos os produtos" },
+              ...produtos.map((produto) => ({ valor: produto.id, nome: produto.nome })),
             ]}
           />
-
           <CampoSelect
             label="Filtrar por tipo"
             valor={filtroTipo}
-            onChange={(valor) =>
-              setFiltroTipo(
-                valor as
-                  | "Todos"
-                  | TipoMovimentacaoEstoque,
-              )
-            }
+            onChange={(valor) => setFiltroTipo(valor as "Todos" | TipoMovimentacaoEstoque)}
             opcoes={[
-              {
-                valor: "Todos",
-                nome: "Todos os tipos",
-              },
-              ...tiposMovimentacao.map((item) => ({
-                valor: item,
-                nome: item,
-              })),
+              { valor: "Todos", nome: "Todos os tipos" },
+              ...tiposMovimentacao.map((item) => ({ valor: item, nome: item })),
             ]}
           />
         </div>
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {movimentacoesFiltradas.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-700 p-8 text-center text-zinc-500">
+            <div className="col-span-full rounded-xl border border-dashed border-zinc-700 p-8 text-center text-zinc-500">
               Nenhuma movimentação encontrada.
             </div>
           ) : (
             movimentacoesFiltradas.map((movimentacao) => (
-              <article
-                key={movimentacao.id}
-                className="rounded-2xl border border-zinc-800 bg-black p-4"
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="flex flex-wrap gap-2">
-                      <span
-                        className={`rounded-lg px-3 py-1 text-xs font-black uppercase ${
-                          movimentacao.tipo === "Entrada" ||
-                          movimentacao.tipo ===
-                            "Ajuste positivo"
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : "bg-red-500/15 text-red-400"
-                        }`}
-                      >
-                        {movimentacao.tipo}
-                      </span>
-
-                      <span className="rounded-lg bg-zinc-800 px-3 py-1 text-xs font-bold text-zinc-300">
-                        {formatarData(movimentacao.data)}
-                      </span>
-                    </div>
-
-                    <h4 className="mt-3 text-lg font-black text-white">
-                      {movimentacao.produtoNome}
-                    </h4>
-
-                    <p className="mt-1 text-sm text-zinc-300">
-                      Quantidade:{" "}
-                      <strong>
-                        {movimentacao.quantidade}
-                      </strong>
-                    </p>
-
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {movimentacao.motivo}
-                    </p>
-
-                    {movimentacao.clienteNome && (
-                      <p className="mt-1 text-sm text-zinc-500">
-                        Cliente: {movimentacao.clienteNome}
-                      </p>
-                    )}
-
-                    <p className="mt-1 text-xs text-zinc-600">
-                      Registrado por:{" "}
-                      {movimentacao.criadoPor}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      excluirMovimentacao(movimentacao.id)
-                    }
-                    className="rounded-xl border border-red-500/50 px-4 py-2 text-sm font-black uppercase text-red-400"
-                  >
-                    Excluir histórico
-                  </button>
+              <article key={movimentacao.id} className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`rounded-lg px-2 py-1 text-[11px] font-black uppercase ${
+                    movimentacao.tipo === "Entrada" || movimentacao.tipo === "Ajuste positivo"
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : "bg-red-500/15 text-red-400"
+                  }`}>
+                    {movimentacao.tipo}
+                  </span>
+                  <span className="text-xs text-zinc-500">{formatarData(movimentacao.data)}</span>
                 </div>
+
+                <h4 className="mt-3 text-sm font-black text-white">{movimentacao.produtoNome}</h4>
+                <p className="mt-1 text-xs text-zinc-300">Quantidade: <strong>{movimentacao.quantidade}</strong></p>
+                <p className="mt-1 text-xs text-zinc-500">{movimentacao.motivo}</p>
+                {movimentacao.clienteNome && <p className="mt-1 text-xs text-zinc-500">Cliente: {movimentacao.clienteNome}</p>}
+                <p className="mt-2 text-[11px] text-zinc-600">Por: {movimentacao.criadoPor}</p>
+
+                <button
+                  type="button"
+                  onClick={() => void excluirMovimentacao(movimentacao.id)}
+                  className="mt-3 rounded-lg border border-red-500/40 px-3 py-1.5 text-[11px] font-black uppercase text-red-400"
+                >
+                  Excluir histórico
+                </button>
               </article>
             ))
           )}
@@ -502,45 +325,23 @@ export default function MovimentacoesEstoque({
   );
 }
 
-function CardResumo({
-  titulo,
-  valor,
-}: {
-  titulo: string;
-  valor: number;
-}) {
+function CardResumo({ titulo, valor }: { titulo: string; valor: number }) {
   return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-      <p className="text-xs font-black uppercase text-zinc-500">
-        {titulo}
-      </p>
-
-      <p className="mt-2 text-2xl font-black text-yellow-400">
-        {valor}
-      </p>
+    <div className="rounded-xl border border-zinc-800 bg-black p-4">
+      <p className="text-[11px] font-black uppercase text-zinc-500">{titulo}</p>
+      <p className="mt-2 text-2xl font-black text-yellow-400">{valor}</p>
     </div>
   );
 }
 
 function CampoTexto({
-  label,
-  valor,
-  onChange,
-  placeholder,
-  tipo = "text",
+  label, valor, onChange, placeholder, tipo = "text",
 }: {
-  label: string;
-  valor: string;
-  onChange: (valor: string) => void;
-  placeholder?: string;
-  tipo?: string;
+  label: string; valor: string; onChange: (valor: string) => void; placeholder?: string; tipo?: string;
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-black uppercase text-zinc-500">
-        {label}
-      </label>
-
+      <label className="mb-2 block text-xs font-black uppercase text-zinc-500">{label}</label>
       <input
         type={tipo}
         min={tipo === "number" ? 0 : undefined}
@@ -548,66 +349,41 @@ function CampoTexto({
         value={valor}
         placeholder={placeholder}
         onChange={(evento) => onChange(evento.target.value)}
-        className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-400"
+        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-400"
       />
     </div>
   );
 }
 
 function CampoSelect({
-  label,
-  valor,
-  onChange,
-  opcoes,
+  label, valor, onChange, opcoes,
 }: {
-  label: string;
-  valor: string;
-  onChange: (valor: string) => void;
-  opcoes: Array<{
-    valor: string;
-    nome: string;
-  }>;
+  label: string; valor: string; onChange: (valor: string) => void; opcoes: Array<{ valor: string; nome: string }>;
 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-black uppercase text-zinc-500">
-        {label}
-      </label>
-
+      <label className="mb-2 block text-xs font-black uppercase text-zinc-500">{label}</label>
       <select
         value={valor}
         onChange={(evento) => onChange(evento.target.value)}
-        className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-400"
+        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-400"
       >
-        {opcoes.map((opcao) => (
-          <option key={opcao.valor} value={opcao.valor}>
-            {opcao.nome}
-          </option>
-        ))}
+        {opcoes.map((opcao) => <option key={opcao.valor} value={opcao.valor}>{opcao.nome}</option>)}
       </select>
     </div>
   );
 }
 
 function converterNumero(valor: string) {
-  const numero = Number(
-    valor.replace(/\./g, "").replace(",", "."),
-  );
-
+  const numero = Number(valor.replace(/\./g, "").replace(",", "."));
   return Number.isNaN(numero) ? 0 : numero;
 }
 
 function formatarMoeda(valor: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(valor);
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(valor);
 }
 
 function formatarData(data: string) {
   if (!data) return "Data não informada";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "UTC",
-  }).format(new Date(`${data}T00:00:00`));
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(`${data}T00:00:00`));
 }

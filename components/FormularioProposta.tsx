@@ -57,6 +57,12 @@ type Formulario = {
   parcelasCartao: string;
   percentualFinanciamento: string;
   parcelasFinanciamento: string;
+  enderecoLoja: string;
+  garantiaDesempenhoModulo: string;
+  garantiaModulo: string;
+  garantiaInversor: string;
+  garantiaInstalacao: string;
+  temaPDF: "claro" | "escuro";
 };
 
 const formularioInicial: Formulario = {
@@ -64,6 +70,9 @@ const formularioInicial: Formulario = {
   modoSistema: "kit", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "",
   quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "",
   percentualCartao: "", parcelasCartao: "18", percentualFinanciamento: "", parcelasFinanciamento: "84",
+  enderecoLoja: "",
+  garantiaDesempenhoModulo: "25", garantiaModulo: "10", garantiaInversor: "10", garantiaInstalacao: "1",
+  temaPDF: "claro",
 };
 
 const instalacoesIniciais: InstalacaoPortfolio[] = Array.from({ length: 4 }, () => ({
@@ -176,6 +185,20 @@ export default function FormularioProposta() {
     }
   }, []);
 
+  useEffect(() => {
+    const enderecoSalvo = localStorage.getItem("choqueseg-endereco-loja") || "";
+    if (enderecoSalvo) {
+      setFormulario((anterior) => ({ ...anterior, enderecoLoja: enderecoSalvo }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const temaSalvo = localStorage.getItem("choqueseg-tema-pdf");
+    if (temaSalvo === "claro" || temaSalvo === "escuro") {
+      setFormulario((anterior) => ({ ...anterior, temaPDF: temaSalvo }));
+    }
+  }, []);
+
   function salvarEquipamentos(novosModulos: Equipamento[], novosInversores: Equipamento[], novosMicroinversores: Equipamento[]) {
     localStorage.setItem("choqueseg-equipamentos", JSON.stringify({ modulos: novosModulos, inversores: novosInversores, microinversores: novosMicroinversores }));
   }
@@ -208,12 +231,48 @@ export default function FormularioProposta() {
     };
   }, [formulario.valorProposta, formulario.percentualCartao, formulario.parcelasCartao, formulario.percentualFinanciamento, formulario.parcelasFinanciamento]);
 
+  const validacaoEconomia = useMemo(() => {
+    const consumo = numero(formulario.consumo);
+    const conta = numero(formulario.valorConta);
+    const geracao = numero(formulario.geracao);
+
+    if (!consumo || !conta || !geracao) {
+      return { mostrar: false, texto: "" };
+    }
+
+    const custoMedioKwh = conta / consumo;
+    if (custoMedioKwh < 0.35 || custoMedioKwh > 2.5) {
+      return {
+        mostrar: true,
+        texto: `Confira a conta mensal informada. Ela equivale a ${dinheiro(custoMedioKwh)}/kWh, valor fora da faixa usual. Isso altera economia e payback.`,
+      };
+    }
+
+    return { mostrar: false, texto: "" };
+  }, [formulario.consumo, formulario.valorConta, formulario.geracao]);
+
   function atualizarCampo(campo: keyof Formulario, valor: string) {
     setFormulario((anterior) => ({ ...anterior, [campo]: valor }));
+    if (campo === "enderecoLoja") {
+      localStorage.setItem("choqueseg-endereco-loja", valor);
+    }
+    if (campo === "temaPDF") {
+      localStorage.setItem("choqueseg-tema-pdf", valor);
+    }
   }
 
   function mudarModo(modoSistema: Formulario["modoSistema"]) {
-    setFormulario((anterior) => ({ ...formularioInicial, nome: anterior.nome, telefone: anterior.telefone, cidade: anterior.cidade, consumo: anterior.consumo, valorConta: anterior.valorConta, percentualCartao: anterior.percentualCartao, parcelasCartao: anterior.parcelasCartao, percentualFinanciamento: anterior.percentualFinanciamento, parcelasFinanciamento: anterior.parcelasFinanciamento, modoSistema }));
+    setFormulario((anterior) => ({
+      ...formularioInicial,
+      nome: anterior.nome, telefone: anterior.telefone, cidade: anterior.cidade, consumo: anterior.consumo, valorConta: anterior.valorConta,
+      percentualCartao: anterior.percentualCartao, parcelasCartao: anterior.parcelasCartao,
+      percentualFinanciamento: anterior.percentualFinanciamento, parcelasFinanciamento: anterior.parcelasFinanciamento,
+      enderecoLoja: anterior.enderecoLoja,
+      garantiaDesempenhoModulo: anterior.garantiaDesempenhoModulo, garantiaModulo: anterior.garantiaModulo,
+      garantiaInversor: anterior.garantiaInversor, garantiaInstalacao: anterior.garantiaInstalacao,
+      temaPDF: anterior.temaPDF,
+      modoSistema,
+    }));
   }
 
   function selecionarKit(kitId: string) {
@@ -306,10 +365,16 @@ export default function FormularioProposta() {
     totalFinanciamento: calculos.totalFinanciamento > 0 ? dinheiro(calculos.totalFinanciamento) : "—",
     parcelaFinanciamento: calculos.parcelaFinanciamento > 0 ? dinheiro(calculos.parcelaFinanciamento) : "—",
     instalacoes,
+    enderecoLoja: formulario.enderecoLoja,
+    garantiaDesempenhoModulo: formulario.garantiaDesempenhoModulo,
+    garantiaModulo: formulario.garantiaModulo,
+    garantiaInversor: formulario.garantiaInversor,
+    garantiaInstalacao: formulario.garantiaInstalacao,
+    temaPDF: formulario.temaPDF,
   };
 
  async function gerarPDF() {
-  const raiz = previewRef.current;
+  const raiz = previewCelularRef.current;
 
   if (!raiz) {
     alert("Não foi possível localizar a proposta.");
@@ -424,12 +489,12 @@ export default function FormularioProposta() {
         return;
       }
 
-      const larguraPdf = 108;
-      const alturaPdf = 192;
+      const larguraPdf = 210;
+      const alturaPdf = 297;
       const pdf = new jsPDF({
         orientation: "portrait",
         unit: "mm",
-        format: [larguraPdf, alturaPdf],
+        format: "a4",
         compress: true,
       });
 
@@ -448,7 +513,7 @@ export default function FormularioProposta() {
         });
 
         const imagem = canvas.toDataURL("image/jpeg", 0.9);
-        if (indice > 0) pdf.addPage([larguraPdf, alturaPdf], "portrait");
+        if (indice > 0) pdf.addPage("a4", "portrait");
 
         pdf.addImage(
           imagem, "JPEG", 0, 0, larguraPdf, alturaPdf, undefined, "FAST",
@@ -478,10 +543,101 @@ export default function FormularioProposta() {
 
    
 
+  function montarMensagemWhatsApp() {
+    const nome = formulario.nome.trim() || "cliente";
+    const potenciaSistema = formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia;
+    const tipoInversor = formulario.tipoInversor === "Microinversor" ? "microinversor" : "inversor";
+    const qtdInversores = Math.max(Math.round(numero(formulario.quantidadeInversores)), 1);
+    const descricaoInversor = [
+      `${qtdInversores} ${qtdInversores === 1 ? tipoInversor : `${tipoInversor}es`}`,
+      inversorSelecionado?.marca,
+      inversorSelecionado?.modelo,
+      inversorSelecionado?.potencia,
+    ].filter(Boolean).join(" ");
+
+    const descricaoModulos = [
+      formulario.quantidadeModulos ? `${formulario.quantidadeModulos} módulos` : "",
+      moduloSelecionado?.marca,
+      moduloSelecionado?.modelo,
+      moduloSelecionado?.potencia,
+    ].filter(Boolean).join(" ");
+
+    const consumoInformado = numero(formulario.consumo);
+    const geracaoInformada = numero(formulario.geracao);
+    const contaInformada = numero(formulario.valorConta);
+
+    const tarifaMediaMensagem =
+      consumoInformado > 0 && contaInformada > 0
+        ? contaInformada / consumoInformado
+        : 0;
+
+    const energiaCompensadaMensagem =
+      consumoInformado > 0 && geracaoInformada > 0
+        ? Math.min(consumoInformado, geracaoInformada)
+        : 0;
+
+    const economiaEnergeticaMensagem =
+      tarifaMediaMensagem > 0
+        ? energiaCompensadaMensagem * tarifaMediaMensagem
+        : 0;
+
+    const economiaMensagem =
+      contaInformada > 0
+        ? Math.min(economiaEnergeticaMensagem, contaInformada * 0.9)
+        : 0;
+
+    const percentualEconomiaMensagem =
+      contaInformada > 0 && economiaMensagem > 0
+        ? economiaMensagem / contaInformada
+        : 0;
+
+    const linhas = [
+      `Olá, ${nome}! Segue sua proposta de Energia Solar da CHOQUESEG.`,
+      "",
+      formulario.consumo ? `Consumo informado: ${formulario.consumo} kWh/mês.` : "",
+      formulario.geracao ? `Geração estimada: aproximadamente ${formulario.geracao} kWh/mês.` : "",
+      potenciaSistema ? `Potência do sistema: ${potenciaSistema}.` : "",
+      descricaoModulos ? `Módulos: ${descricaoModulos}.` : "",
+      descricaoInversor ? `Equipamento de conversão: ${descricaoInversor}.` : "",
+      "",
+      economiaMensagem > 0
+        ? `Economia estimada: ${dinheiro(economiaMensagem)}/mês (${Math.round(percentualEconomiaMensagem * 100)}% da conta informada).`
+        : "",
+      calculos.valorBase > 0 ? `Valor à vista: ${dinheiro(calculos.valorBase)}.` : "",
+      calculos.totalCartao > 0
+        ? `Cartão: ${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)} (total ${dinheiro(calculos.totalCartao)}).`
+        : "",
+      calculos.totalFinanciamento > 0
+        ? `Financiamento: ${calculos.parcelasFinanciamento}x de ${dinheiro(calculos.parcelaFinanciamento)} (total ${dinheiro(calculos.totalFinanciamento)}), sujeito à análise e aprovação.`
+        : "",
+      "",
+      "Todos os detalhes do sistema, equipamentos, garantias e condições estão no PDF da proposta.",
+      "Fico à disposição para qualquer dúvida.",
+    ];
+
+    return linhas.filter((linha, indice, todas) => {
+      if (linha !== "") return true;
+      return indice > 0 && todas[indice - 1] !== "";
+    }).join("\n").trim();
+  }
+
   function abrirWhatsApp() {
     const telefone = formulario.telefone.replace(/\D/g, "");
-    const destino = telefone.length >= 10 ? `55${telefone}` : "";
-    const mensagem = encodeURIComponent(`Olá, ${formulario.nome || "cliente"}! Segue a proposta comercial de energia solar preparada pela ChoqueSeg.`);
+    if (telefone.length < 10) {
+      alert("Informe um telefone válido do cliente antes de abrir o WhatsApp.");
+      return;
+    }
+
+    const destino = telefone.startsWith("55") ? telefone : `55${telefone}`;
+    const mensagemPadrao = montarMensagemWhatsApp();
+    const mensagemEditada = window.prompt(
+      "Revise a mensagem que acompanhará o PDF. Você pode alterar antes de enviar:",
+      mensagemPadrao,
+    );
+
+    if (mensagemEditada === null) return;
+
+    const mensagem = encodeURIComponent(mensagemEditada.trim() || mensagemPadrao);
     window.open(`https://wa.me/${destino}?text=${mensagem}`, "_blank", "noopener,noreferrer");
   }
 
@@ -493,21 +649,58 @@ export default function FormularioProposta() {
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={gerarPDF} disabled={gerandoPDF} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Gerando PDF..." : "Gerar PDF"}</button>
             <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDFCelular} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
+            <button
+              type="button"
+              onClick={() => atualizarCampo("temaPDF", "claro")}
+              className={`rounded-xl border px-3 py-3 text-xs font-black uppercase ${
+                formulario.temaPDF === "claro"
+                  ? "border-yellow-400 bg-white text-black"
+                  : "border-zinc-600 bg-zinc-900 text-white"
+              }`}
+            >
+              PDF Claro
+            </button>
+            <button
+              type="button"
+              onClick={() => atualizarCampo("temaPDF", "escuro")}
+              className={`rounded-xl border px-3 py-3 text-xs font-black uppercase ${
+                formulario.temaPDF === "escuro"
+                  ? "border-yellow-400 bg-black text-yellow-400"
+                  : "border-zinc-600 bg-zinc-900 text-white"
+              }`}
+            >
+              PDF Escuro
+            </button>
             <button type="button" onClick={abrirWhatsApp} className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white">Abrir WhatsApp</button>
-            <button type="button" onClick={() => { setFormulario(formularioInicial); setInstalacoes(instalacoesIniciais); }} className="rounded-xl border border-zinc-600 px-4 py-3 text-sm font-black uppercase text-white">Limpar</button>
+            <button type="button" onClick={() => {
+              setFormulario((anterior) => ({
+                ...formularioInicial,
+                enderecoLoja: anterior.enderecoLoja,
+                temaPDF: anterior.temaPDF,
+              }));
+              setInstalacoes(instalacoesIniciais);
+            }} className="rounded-xl border border-zinc-600 px-4 py-3 text-sm font-black uppercase text-white">Limpar</button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-[1800px] gap-5 p-4 xl:grid-cols-[380px_minmax(0,1fr)] xl:p-6">
-        <aside className="self-start rounded-3xl border border-yellow-400/50 bg-black p-5 xl:sticky xl:top-24">
-          <div className="mb-6 text-center"><img src="/imagens/logo/brasao-choqueseg.png" alt="Brasão ChoqueSeg" className="mx-auto h-32 w-32 object-contain" /><p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">Preenchimento da proposta</p></div>
+      <div className="mx-auto grid w-full max-w-[1920px] gap-3 p-3 xl:grid-cols-[minmax(270px,30%)_minmax(0,70%)] xl:p-4">
+        <aside className="min-w-0 self-start rounded-3xl border border-yellow-400/50 bg-black p-4 xl:sticky xl:top-24">
+          <div className="mb-6 text-center"><img src="/imagens/logo/brasao-choqueseg.png" alt="Brasão ChoqueSeg" className="mx-auto h-24 w-24 object-contain" /><p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">Preenchimento da proposta</p></div>
           <div className="space-y-5">
             <SecaoFormulario titulo="Cliente">
               <Campo titulo="Nome" valor={formulario.nome} aoAlterar={(v) => atualizarCampo("nome", v)} />
               <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
               <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
-              <div className="grid grid-cols-2 gap-3"><Campo titulo="Consumo kWh" valor={formulario.consumo} aoAlterar={(v) => atualizarCampo("consumo", v)} /><Campo titulo="Conta mensal" valor={formulario.valorConta} aoAlterar={(v) => atualizarCampo("valorConta", v)} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <Campo titulo="Consumo kWh" valor={formulario.consumo} aoAlterar={(v) => atualizarCampo("consumo", v)} />
+                <Campo titulo="Conta mensal (R$)" valor={formulario.valorConta} aoAlterar={(v) => atualizarCampo("valorConta", v)} />
+              </div>
+              {validacaoEconomia.mostrar && (
+                <div className="rounded-xl border border-red-500/70 bg-red-950/40 px-3 py-2 text-xs font-bold leading-relaxed text-red-200">
+                  ⚠ {validacaoEconomia.texto}
+                </div>
+              )}
             </SecaoFormulario>
 
             <SecaoFormulario titulo="Sistema solar">
@@ -524,6 +717,21 @@ export default function FormularioProposta() {
               <p className="text-xs leading-relaxed text-zinc-400">Os percentuais aparecem somente no gerador. O cliente verá o valor final e as parcelas.</p>
               <PagamentoFormulario titulo="Cartão" percentual={formulario.percentualCartao} parcelas={formulario.parcelasCartao} parcelaCalculada={calculos.parcelaCartao} aoPercentual={(v) => atualizarCampo("percentualCartao", v)} aoParcelas={(v) => atualizarCampo("parcelasCartao", v)} />
               <PagamentoFormulario titulo="Financiamento" percentual={formulario.percentualFinanciamento} parcelas={formulario.parcelasFinanciamento} parcelaCalculada={calculos.parcelaFinanciamento} aoPercentual={(v) => atualizarCampo("percentualFinanciamento", v)} aoParcelas={(v) => atualizarCampo("parcelasFinanciamento", v)} />
+            </SecaoFormulario>
+
+            <SecaoFormulario titulo="Rodapé da proposta">
+              <Campo titulo="Endereço da loja CHOQUESEG" valor={formulario.enderecoLoja} aoAlterar={(v) => atualizarCampo("enderecoLoja", v)} />
+              <p className="text-xs leading-relaxed text-zinc-400">Este campo é somente o endereço da loja da CHOQUESEG. Ele fica salvo neste computador e aparece automaticamente no rodapé das duas páginas. Não usa o endereço do cliente.</p>
+            </SecaoFormulario>
+
+            <SecaoFormulario titulo="Garantias">
+              <div className="grid grid-cols-2 gap-3">
+                <Campo titulo="Desempenho do módulo (anos)" valor={formulario.garantiaDesempenhoModulo} aoAlterar={(v) => atualizarCampo("garantiaDesempenhoModulo", v)} />
+                <Campo titulo="Garantia do módulo (anos)" valor={formulario.garantiaModulo} aoAlterar={(v) => atualizarCampo("garantiaModulo", v)} />
+                <Campo titulo="Garantia do inversor (anos)" valor={formulario.garantiaInversor} aoAlterar={(v) => atualizarCampo("garantiaInversor", v)} />
+                <Campo titulo="Garantia da instalação (anos)" valor={formulario.garantiaInstalacao} aoAlterar={(v) => atualizarCampo("garantiaInstalacao", v)} />
+              </div>
+              <p className="text-xs leading-relaxed text-zinc-400">Os valores são editáveis para acompanhar exatamente as garantias dos equipamentos selecionados na proposta.</p>
             </SecaoFormulario>
 
             <SecaoFormulario titulo="Fotos das instalações">
@@ -606,9 +814,15 @@ export default function FormularioProposta() {
             </SecaoFormulario>
           </div>
         </aside>
-        <section className="min-w-0"><PreviewProposta ref={previewRef} dados={dadosPreview} /></section>
-        <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[430px]">
-          <PreviewProposta ref={previewCelularRef} dados={dadosPreview} modo="celular" />
+        <section className="min-w-0 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-2">
+          <div className="flex w-full justify-center">
+            <div className="origin-top [zoom:0.68] 2xl:[zoom:0.78] min-[1750px]:[zoom:0.88] min-[1900px]:[zoom:0.96]">
+              <PreviewProposta ref={previewRef} dados={dadosPreview} />
+            </div>
+          </div>
+        </section>
+        <div aria-hidden="true" className="pointer-events-none fixed left-[-10000px] top-0 w-[794px] bg-white">
+          <PreviewProposta ref={previewCelularRef} dados={dadosPreview} />
         </div>
       </div>
     </main>

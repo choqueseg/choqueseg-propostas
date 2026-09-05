@@ -11,8 +11,6 @@ import PreviewAutomacao, {
 } from "./PreviewAutomacao";
 
 const WHATSAPP_CHOQUESEG = "5579999390653";
-const LINK_AVALIACAO_GOOGLE =
-  "https://www.google.com/search?q=CHOQUESEG+Aracaju+avalia%C3%A7%C3%A3o";
 
 type ItemOrcamento = ItemAutomacaoPreview & {
   produtoId: string;
@@ -74,6 +72,10 @@ export default function FormularioAutomacao() {
 
   const [produtoSelecionado, setProdutoSelecionado] = useState("");
   const [desconto, setDesconto] = useState(0);
+  const [parcelasCartao, setParcelasCartao] = useState(12);
+  const [taxaCartao, setTaxaCartao] = useState(0);
+  const [mensagemWhatsApp, setMensagemWhatsApp] = useState("");
+  const [mostrarMensagemWhatsApp, setMostrarMensagemWhatsApp] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
 
@@ -167,12 +169,22 @@ export default function FormularioAutomacao() {
       subtotal,
     );
 
+    const totalFinal = subtotal - descontoAplicado;
+    const parcelasValidas = Math.max(1, Math.floor(parcelasCartao || 1));
+    const taxaValida = Math.max(0, taxaCartao || 0);
+    const totalCartao = totalFinal * (1 + taxaValida / 100);
+    const valorParcela = totalCartao / parcelasValidas;
+
     return {
       subtotal,
       descontoAplicado,
-      totalFinal: subtotal - descontoAplicado,
+      totalFinal,
+      parcelasValidas,
+      taxaValida,
+      totalCartao,
+      valorParcela,
     };
-  }, [itens, desconto]);
+  }, [itens, desconto, parcelasCartao, taxaCartao]);
 
   const dadosPreview: DadosPreviewAutomacao = {
     nome,
@@ -184,6 +196,9 @@ export default function FormularioAutomacao() {
     subtotal: totais.subtotal,
     desconto: totais.descontoAplicado,
     total: totais.totalFinal,
+    parcelasCartao: totais.parcelasValidas,
+    totalCartao: totais.totalCartao,
+    valorParcela: totais.valorParcela,
   };
 
   function limparFormulario() {
@@ -194,6 +209,10 @@ export default function FormularioAutomacao() {
     setObservacoes("");
     setProdutoSelecionado("");
     setDesconto(0);
+    setParcelasCartao(12);
+    setTaxaCartao(0);
+    setMensagemWhatsApp("");
+    setMostrarMensagemWhatsApp(false);
     setItens([]);
   }
 
@@ -271,19 +290,71 @@ export default function FormularioAutomacao() {
     }
   }
 
-  function abrirWhatsAppCliente() {
+  function montarMensagemProposta() {
+    const primeiroNome = nome.trim().split(/\s+/)[0] || "cliente";
+
+    const principaisItens = itens
+      .filter((item) => item.descricao.trim())
+      .slice(0, 3)
+      .map((item) => {
+        const quantidade = Number(item.quantidade) || 0;
+        return quantidade > 1
+          ? `${quantidade}x ${item.descricao.trim()}`
+          : item.descricao.trim();
+      });
+
+    const resumoItens =
+      principaisItens.length > 0
+        ? ` A proposta contempla ${principaisItens.join(", ")}.`
+        : "";
+
+    const trechoCartao =
+      totais.parcelasValidas > 1
+        ? ` No cartão, o pagamento pode ser feito em ${totais.parcelasValidas}x de ${moeda(
+            totais.valorParcela,
+          )}, totalizando ${moeda(totais.totalCartao)}.`
+        : "";
+
+    return (
+      `Olá, ${primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase()}! Tudo bem?\n\n` +
+      `Preparei sua proposta de Casa Inteligente da CHOQUESEG.${resumoItens}\n\n` +
+      `O valor à vista ficou em ${moeda(totais.totalFinal)}.${trechoCartao}\n\n` +
+      `Todos os equipamentos, serviços, quantidades, valores e demais informações estão detalhados no PDF da proposta.\n\n` +
+      `Fico à disposição para qualquer dúvida.\n` +
+      `Equipe CHOQUESEG`
+    );
+  }
+
+  function abrirPreparacaoWhatsApp() {
+    const numeroCliente = telefone.replace(/\D/g, "");
+    if (numeroCliente.length < 10) {
+      alert("Informe um telefone válido do cliente.");
+      return;
+    }
+    setMensagemWhatsApp(montarMensagemProposta());
+    setMostrarMensagemWhatsApp(true);
+  }
+
+  function enviarMensagemWhatsApp() {
     const numeroCliente = telefone.replace(/\D/g, "");
     const destino =
-      numeroCliente.length >= 10 ? `55${numeroCliente}` : "";
+      numeroCliente.startsWith("55") && numeroCliente.length >= 12
+        ? numeroCliente
+        : numeroCliente.length >= 10
+          ? `55${numeroCliente}`
+          : "";
 
-    const mensagem = encodeURIComponent(
-      `Olá, ${nome || "cliente"}! Segue a proposta de automação residencial preparada pela CHOQUESEG. O valor total é ${moeda(
-        totais.totalFinal,
-      )}.`,
-    );
+    if (!destino) {
+      alert("Informe um telefone válido do cliente.");
+      return;
+    }
+    if (!mensagemWhatsApp.trim()) {
+      alert("A mensagem não pode ficar vazia.");
+      return;
+    }
 
     window.open(
-      `https://wa.me/${destino}?text=${mensagem}`,
+      `https://wa.me/${destino}?text=${encodeURIComponent(mensagemWhatsApp)}`,
       "_blank",
       "noopener,noreferrer",
     );
@@ -312,7 +383,7 @@ export default function FormularioAutomacao() {
               CHOQUESEG
             </p>
             <h1 className="text-lg font-black uppercase md:text-2xl">
-              Proposta de Automação Residencial
+              Proposta Casa Inteligente
             </h1>
           </div>
 
@@ -328,10 +399,10 @@ export default function FormularioAutomacao() {
 
             <button
               type="button"
-              onClick={abrirWhatsAppCliente}
+              onClick={abrirPreparacaoWhatsApp}
               className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white"
             >
-              Enviar WhatsApp
+              💬 Preparar mensagem
             </button>
 
             <button
@@ -341,15 +412,6 @@ export default function FormularioAutomacao() {
             >
               Fechar com a CHOQUESEG
             </button>
-
-            <a
-              href={LINK_AVALIACAO_GOOGLE}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-xl border border-blue-500 px-4 py-3 text-sm font-black uppercase text-blue-400"
-            >
-              Avaliar no Google
-            </a>
 
             <button
               type="button"
@@ -537,11 +599,105 @@ export default function FormularioAutomacao() {
                 destaque
               />
             </div>
+
+            <section className="mt-6 border-t border-zinc-800 pt-6">
+              <h3 className="text-sm font-black uppercase tracking-[0.18em] text-yellow-400">
+                Condições de pagamento
+              </h3>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <label>
+                  <span className="mb-1.5 block text-sm font-bold text-zinc-200">
+                    Parcelas no cartão
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="24"
+                    value={parcelasCartao}
+                    onChange={(evento) =>
+                      setParcelasCartao(Math.max(1, Number(evento.target.value) || 1))
+                    }
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"
+                  />
+                </label>
+
+                <label>
+                  <span className="mb-1.5 block text-sm font-bold text-zinc-200">
+                    Acréscimo do cartão (%)
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={taxaCartao}
+                    onChange={(evento) =>
+                      setTaxaCartao(Math.max(0, Number(evento.target.value) || 0))
+                    }
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"
+                  />
+                </label>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-black p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-zinc-400">
+                  Resumo para o cliente
+                </p>
+                <p className="mt-2 text-lg font-black text-white">
+                  À vista: {moeda(totais.totalFinal)}
+                </p>
+                <p className="mt-1 text-lg font-black text-yellow-400">
+                  Cartão: {totais.parcelasValidas}x de {moeda(totais.valorParcela)}
+                </p>
+                <p className="mt-1 text-sm font-bold text-zinc-400">
+                  Total no cartão: {moeda(totais.totalCartao)}
+                </p>
+              </div>
+            </section>
           </section>
 
           <PreviewAutomacao ref={previewRef} dados={dadosPreview} />
         </section>
       </div>
+
+      {mostrarMensagemWhatsApp && (
+        <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/80 p-3 backdrop-blur-sm md:p-6">
+          <div className="mx-auto mt-8 w-full max-w-3xl rounded-3xl border border-green-500/50 bg-zinc-950 p-5 shadow-2xl md:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-green-400">
+                  Mensagem da proposta
+                </p>
+                <h2 className="mt-1 text-2xl font-black uppercase text-white">
+                  Revise antes de abrir o WhatsApp
+                </h2>
+              </div>
+              <button type="button" onClick={() => setMostrarMensagemWhatsApp(false)}
+                className="rounded-xl border border-zinc-600 px-3 py-2 text-sm font-black uppercase text-zinc-300">
+                Fechar
+              </button>
+            </div>
+
+            <textarea value={mensagemWhatsApp}
+              onChange={(evento) => setMensagemWhatsApp(evento.target.value)}
+              rows={12}
+              className="mt-5 w-full resize-y rounded-2xl border border-zinc-700 bg-black px-4 py-4 text-sm leading-relaxed text-white outline-none focus:border-green-500"
+            />
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button type="button" onClick={enviarMensagemWhatsApp}
+                className="rounded-xl bg-green-600 px-5 py-4 font-black uppercase text-white">
+                💬 Abrir WhatsApp com esta mensagem
+              </button>
+              <button type="button" onClick={() => setMensagemWhatsApp(montarMensagemProposta())}
+                className="rounded-xl border border-yellow-400 px-5 py-4 font-black uppercase text-yellow-400">
+                Restaurar mensagem sugerida
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

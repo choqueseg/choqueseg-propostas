@@ -29,6 +29,9 @@ export type DadosPreviewSeguranca = {
   subtotal: number;
   desconto: number;
   total: number;
+  parcelasCartao: number;
+  totalCartao: number;
+  parcelaCartao: number;
 };
 
 type Props = {
@@ -177,7 +180,40 @@ const PreviewSeguranca = forwardRef<HTMLDivElement, Props>(
           <section className="mt-5 grid gap-3 sm:grid-cols-3">
             <Resumo titulo="Subtotal" valor={moeda(dados.subtotal)} />
             <Resumo titulo="Desconto" valor={moeda(dados.desconto)} />
-            <Resumo titulo="Valor final" valor={moeda(dados.total)} destaque />
+            <Resumo titulo="Valor à vista" valor={moeda(dados.total)} destaque />
+          </section>
+
+          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-black p-5 text-white">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
+              Condições de pagamento
+            </p>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-black uppercase text-zinc-400">
+                  À vista
+                </p>
+                <p className="mt-1 text-xl font-black">
+                  {moeda(dados.total)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-black uppercase text-zinc-400">
+                  Cartão de crédito
+                </p>
+                <p className="mt-1 text-xl font-black text-yellow-400">
+                  {dados.parcelasCartao > 1
+                    ? `${dados.parcelasCartao}x de ${moeda(dados.parcelaCartao)}`
+                    : "Não informado"}
+                </p>
+                {dados.parcelasCartao > 1 && (
+                  <p className="mt-1 text-xs font-bold text-zinc-400">
+                    Total no cartão: {moeda(dados.totalCartao)}
+                  </p>
+                )}
+              </div>
+            </div>
           </section>
         </Pagina>
 
@@ -249,25 +285,14 @@ const PreviewSeguranca = forwardRef<HTMLDivElement, Props>(
                   Vamos proteger o que é importante para você?
                 </p>
 
-                <div className="mt-4 flex flex-col gap-3 sm:max-w-[360px]">
-                  <a
-                    href={linkFechamento}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl bg-yellow-400 px-5 py-3 text-sm font-black uppercase text-black"
-                  >
-                    ✅ Quero fechar com a CHOQUESEG
-                  </a>
-
-                  <a
-                    href="https://g.page/r/CTbFpWqrl-nMEBO/review"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border-2 border-yellow-400 px-5 py-3 text-sm font-black uppercase text-yellow-400"
-                  >
-                    ⭐ Avaliar a CHOQUESEG no Google
-                  </a>
-                </div>
+                <a
+                  href={linkFechamento}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-4 inline-flex rounded-xl bg-yellow-400 px-5 py-3 text-sm font-black uppercase text-black"
+                >
+                  Quero fechar com a CHOQUESEG
+                </a>
 
                 <p className="mt-4 font-bold text-white">
                   (79) 9.9939-0653 • @choqueseg

@@ -29,6 +29,9 @@ export type DadosPreviewAutomacao = {
   subtotal: number;
   desconto: number;
   total: number;
+  parcelasCartao: number;
+  totalCartao: number;
+  valorParcela: number;
 };
 
 type Props = {
@@ -54,7 +57,7 @@ function moeda(valor?: number | null) {
 const PreviewAutomacao = forwardRef<HTMLDivElement, Props>(
   function PreviewAutomacao({ dados }, ref) {
     const mensagemFechamento = [
-      "Olá, CHOQUESEG! Analisei minha proposta de automação e quero fechar o serviço.",
+      "Olá, CHOQUESEG! Analisei minha proposta de Casa Inteligente e quero fechar o serviço.",
       "",
       `Cliente: ${dados.nome || "Não informado"}`,
       `Cidade: ${dados.cidade || "Não informada"}`,
@@ -91,9 +94,9 @@ const PreviewAutomacao = forwardRef<HTMLDivElement, Props>(
                   </p>
 
                   <h1 className="mt-3 text-5xl font-black uppercase leading-[0.92] text-white">
-                    Automação
+                    Casa
                     <br />
-                    Residencial
+                    Inteligente
                   </h1>
                 </div>
 
@@ -182,7 +185,30 @@ const PreviewAutomacao = forwardRef<HTMLDivElement, Props>(
           <section className="mt-5 grid gap-3 sm:grid-cols-3">
             <Resumo titulo="Subtotal" valor={moeda(dados.subtotal)} />
             <Resumo titulo="Desconto" valor={moeda(dados.desconto)} />
-            <Resumo titulo="Valor final" valor={moeda(dados.total)} destaque />
+            <Resumo titulo="Valor à vista" valor={moeda(dados.total)} destaque />
+          </section>
+
+          <section className="mt-4 rounded-[20px] border border-yellow-400 bg-black p-4 text-white">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-yellow-400">
+              Condições de pagamento
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-bold uppercase text-zinc-400">À vista</p>
+                <strong className="mt-1 block text-xl font-black">
+                  {moeda(dados.total)}
+                </strong>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase text-zinc-400">Cartão</p>
+                <strong className="mt-1 block text-xl font-black text-yellow-400">
+                  {dados.parcelasCartao}x de {moeda(dados.valorParcela)}
+                </strong>
+                <p className="mt-1 text-xs font-bold text-zinc-400">
+                  Total no cartão: {moeda(dados.totalCartao)}
+                </p>
+              </div>
+            </div>
           </section>
         </Pagina>
 
@@ -262,15 +288,6 @@ const PreviewAutomacao = forwardRef<HTMLDivElement, Props>(
                     className="inline-flex items-center justify-center rounded-xl bg-yellow-400 px-5 py-3 text-sm font-black uppercase text-black"
                   >
                     ✅ Quero fechar com a CHOQUESEG
-                  </a>
-
-                  <a
-                    href="https://g.page/r/CTbFpWqrl-nMEBO/review"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center rounded-xl border-2 border-yellow-400 px-5 py-3 text-sm font-black uppercase text-yellow-400"
-                  >
-                    ⭐ Avaliar a CHOQUESEG no Google
                   </a>
                 </div>
 

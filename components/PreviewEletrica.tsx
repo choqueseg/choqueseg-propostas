@@ -29,6 +29,9 @@ export type DadosPreviewEletrica = {
   subtotal: number;
   desconto: number;
   total: number;
+  parcelasCartao: number;
+  totalCartao: number;
+  valorParcela: number;
 };
 
 type Props = {
@@ -54,7 +57,8 @@ const PreviewEletrica = forwardRef<HTMLDivElement, Props>(
       `Cliente: ${dados.nome || "Não informado"}`,
       `Cidade: ${dados.cidade || "Não informada"}`,
       `Telefone: ${dados.telefone || "Não informado"}`,
-      `Valor: ${moeda(dados.total)}`,
+      `Valor à vista: ${moeda(dados.total)}`,
+      `Cartão: ${dados.parcelasCartao}x de ${moeda(dados.valorParcela)}`,
       "",
       "Quero dar continuidade ao fechamento.",
     ].join("\n");
@@ -177,7 +181,28 @@ const PreviewEletrica = forwardRef<HTMLDivElement, Props>(
           <section className="mt-5 grid gap-3 sm:grid-cols-3">
             <Resumo titulo="Subtotal" valor={moeda(dados.subtotal)} />
             <Resumo titulo="Desconto" valor={moeda(dados.desconto)} />
-            <Resumo titulo="Valor final" valor={moeda(dados.total)} destaque />
+            <Resumo titulo="Valor à vista" valor={moeda(dados.total)} destaque />
+          </section>
+
+          <section className="mt-4 rounded-[22px] border border-yellow-400 bg-black p-5 text-white">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
+              Condições de pagamento
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <CondicaoPagamento
+                titulo="À vista"
+                valor={moeda(dados.total)}
+              />
+              <CondicaoPagamento
+                titulo={`${dados.parcelasCartao}x no cartão`}
+                valor={moeda(dados.valorParcela)}
+                destaque
+              />
+              <CondicaoPagamento
+                titulo="Total no cartão"
+                valor={moeda(dados.totalCartao)}
+              />
+            </div>
           </section>
         </Pagina>
 
@@ -238,7 +263,7 @@ const PreviewEletrica = forwardRef<HTMLDivElement, Props>(
             <div className="mt-4 grid grid-cols-3 gap-3">
               <Servico icone="☀️" titulo="Energia Solar" />
               <Servico icone="📹" titulo="Segurança Eletrônica" />
-              <Servico icone="🏠" titulo="Automação" />
+              <Servico icone="🏠" titulo="Casa Inteligente" />
             </div>
           </section>
 
@@ -333,6 +358,31 @@ function Resumo({
         {titulo}
       </p>
       <strong className="mt-2 block text-2xl font-black">{valor}</strong>
+    </div>
+  );
+}
+
+function CondicaoPagamento({
+  titulo,
+  valor,
+  destaque = false,
+}: {
+  titulo: string;
+  valor: string;
+  destaque?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        destaque
+          ? "border-yellow-400 bg-yellow-400 text-black"
+          : "border-zinc-700 bg-zinc-900 text-white"
+      }`}
+    >
+      <p className="text-xs font-black uppercase tracking-[0.12em]">
+        {titulo}
+      </p>
+      <strong className="mt-2 block text-xl font-black">{valor}</strong>
     </div>
   );
 }

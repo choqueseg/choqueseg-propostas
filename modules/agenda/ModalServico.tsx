@@ -1,4 +1,4 @@
-"use client";
+
 
 import { useEffect, useState } from "react";
 import AssinaturaServico from "./AssinaturaServico";
@@ -20,57 +20,46 @@ type Props = {
   ehAdministrador: boolean;
   podeVerContatoCliente: boolean;
   aoFechar: () => void;
-  aoSalvar: (servico: Servico) => void;
+  aoSalvar: (servico: Servico) => Promise<boolean | string> | boolean | string | void;
   aoAbrirMaps: (endereco: string, cidade: string) => void;
 };
 
-const CHECKLIST_PADRAO = [
-  "Cliente presente ou responsável autorizado",
-  "Fotos antes da execução registradas",
-  "Equipamentos e materiais conferidos",
-  "Estrutura e local de instalação conferidos",
-  "Instalação e conexões revisadas",
-  "Sistema energizado com segurança",
-  "Testes de funcionamento realizados",
-  "Cliente orientado sobre o sistema",
+const CHECKLIST_SAIDA_PADRAO = [
+  "Ferramentas",
+  "Escada",
+  "Capacete e EPIs",
+  "Fios e cabos",
+  "Material de acordo com o serviço",
+  "Água, almoço, cimento e gesso",
 ];
 
-const CHECKLIST_ENERGIA_SOLAR = [
-  "Levar água",
-  "Levar protetor solar",
-  "Levar o almoço",
-  "Conferir capacete e EPIs",
-  "Conferir cinto de segurança e equipamentos para trabalho em altura",
-  "Conferir módulos solares",
-  "Conferir inversor ou microinversores",
-  "Conferir estrutura de fixação",
-  "Conferir cabos solares e conectores",
-  "Conferir proteções elétricas e ferramentas necessárias",
-];
-
-function ehServicoEnergiaSolar(tipoServico?: string) {
-  const tipo = (tipoServico ?? "")
+function normalizarTexto(valor?: string) {
+  return (valor ?? "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .toLowerCase();
+}
 
-  return tipo.includes("energia solar") || tipo.includes("solar");
+function itensEspecificosDoServico(_tipoServico?: string) {
+  return [];
 }
 
 function criarChecklist(
   itens?: ItemChecklist[],
   tipoServico?: string,
 ) {
-  const titulosObrigatorios = ehServicoEnergiaSolar(tipoServico)
-    ? [...CHECKLIST_ENERGIA_SOLAR, ...CHECKLIST_PADRAO]
-    : CHECKLIST_PADRAO;
+  const titulosObrigatorios = [
+    ...CHECKLIST_SAIDA_PADRAO,
+    ...itensEspecificosDoServico(tipoServico),
+  ];
 
   const itensExistentes = itens ?? [];
 
-  return titulosObrigatorios.map((titulo, indice) => {
+  const obrigatorios = titulosObrigatorios.map((titulo, indice) => {
     const existente = itensExistentes.find(
-      (item) => item.titulo.trim().toLowerCase() === titulo.trim().toLowerCase(),
+      (item) =>
+        item.titulo.trim().toLowerCase() === titulo.trim().toLowerCase(),
     );
 
     return (
@@ -86,8 +75,18 @@ function criarChecklist(
       }
     );
   });
-}
 
+  const extras = itensExistentes.filter(
+    (item) =>
+      item.id.startsWith("extra-") ||
+      !titulosObrigatorios.some(
+        (titulo) =>
+          titulo.trim().toLowerCase() === item.titulo.trim().toLowerCase(),
+      ),
+  );
+
+  return [...obrigatorios, ...extras];
+}
 
 function criarEvento(usuario: string, descricao: string): EventoHistorico {
   return {
@@ -102,6 +101,7 @@ export default function ModalServico({
   servico,
   usuarioNome,
   ehAdministrador,
+  podeVerContatoCliente,
   aoFechar,
   aoSalvar,
   aoAbrirMaps,
@@ -116,6 +116,29 @@ export default function ModalServico({
   const [mensagem, setMensagem] = useState("");
 
   const bloqueado = rascunho.status === "Concluído" && !ehAdministrador;
+  const checklistEncerrado = Boolean(rascunho.saidaEmpresaEm) || bloqueado;
+  const chegouAoCliente = Boolean(rascunho.chegadaClienteEm);
+  const servicoIniciado = Boolean(rascunho.iniciadoEm);
+  const servicoConcluido = rascunho.status === "Concluído";
+
+  const checklistCompleto =
+    (rascunho.checklist ?? []).length > 0 &&
+    (rascunho.checklist ?? []).every((item) => item.concluido);
+
+  const fotosAntes = (rascunho.fotos ?? []).filter(
+    (foto) => foto.etapa === "Antes",
+  ).length;
+  const fotosDepois = (rascunho.fotos ?? []).filter(
+    (foto) => foto.etapa === "Depois",
+  ).length;
+
+  const etapasFotosPermitidas: FotoServico["etapa"][] = servicoConcluido
+    ? []
+    : !chegouAoCliente
+      ? []
+      : !servicoIniciado
+        ? ["Antes"]
+        : ["Durante", "Depois"];
 
   useEffect(() => {
     function fecharComEsc(evento: KeyboardEvent) {
@@ -148,6 +171,13 @@ export default function ModalServico({
     setMensagem("Andamento salvo com sucesso.");
   }
 function registrarSaidaEmpresa() {
+  if (!checklistCompleto) {
+    setMensagem(
+      "Conclua todo o checklist de saída antes de registrar a saída da empresa.",
+    );
+    return;
+  }
+
   const agora = new Date().toISOString();
 
   const atualizado: Servico = {
@@ -182,6 +212,13 @@ function registrarChegadaCliente() {
   setMensagem("Chegada ao cliente registrada.");
 }
   function iniciarServico() {
+    if (fotosAntes === 0) {
+      setMensagem(
+        "Registre pelo menos uma foto ANTES antes de iniciar o serviço.",
+      );
+      return;
+    }
+
     const agora = new Date().toISOString();
     const atualizado: Servico = {
       ...rascunho,
@@ -198,23 +235,24 @@ function registrarChegadaCliente() {
     setMensagem("Serviço iniciado.");
   }
 
-  function concluirServico() {
-    const itensPendentes = (rascunho.checklist ?? []).filter(
-      (item) => !item.concluido,
-    ).length;
+  async function concluirServico() {
+    if (!servicoIniciado) {
+      setMensagem("Inicie o serviço antes de concluir a ordem.");
+      return;
+    }
 
-    if (itensPendentes > 0) {
-      const continuar = window.confirm(
-        `Ainda existem ${itensPendentes} itens pendentes no checklist. Deseja concluir mesmo assim?`,
+    if (fotosDepois === 0) {
+      setMensagem(
+        "Registre pelo menos uma foto DEPOIS antes de concluir o serviço.",
       );
-      if (!continuar) return;
+      return;
     }
 
     if (!rascunho.assinaturaCliente) {
-      const continuar = window.confirm(
-        "A assinatura do cliente não foi registrada. Deseja concluir mesmo assim?",
+      setMensagem(
+        "Registre a assinatura do cliente antes de concluir o serviço.",
       );
-      if (!continuar) return;
+      return;
     }
 
     const agora = new Date().toISOString();
@@ -231,18 +269,59 @@ function registrarChegadaCliente() {
       ],
     };
 
+    setMensagem("Concluindo serviço e atualizando estoque...");
+
+    const salvo = await aoSalvar(atualizado);
+
+    if (salvo === false) {
+      setMensagem(
+        "Não foi possível concluir o serviço. Verifique a mensagem da Agenda.",
+      );
+      return;
+    }
+
     setRascunho(atualizado);
-    aoSalvar(atualizado);
-    setMensagem("Serviço concluído com sucesso.");
+
+    if (typeof salvo === "string" && salvo.trim()) {
+      setMensagem(salvo);
+    } else {
+      setMensagem("Serviço concluído com sucesso.");
+    }
   }
 
+  const etapaAtual =
+    servicoConcluido
+      ? 8
+      : rascunho.assinaturaCliente && fotosDepois > 0
+        ? 7
+        : servicoIniciado
+          ? 5
+          : fotosAntes > 0 && chegouAoCliente
+            ? 4
+            : chegouAoCliente
+              ? 3
+              : rascunho.saidaEmpresaEm
+                ? 2
+                : 1;
+
+  const etapasFluxo = [
+    "Saída da empresa",
+    "Cheguei ao cliente",
+    "Fotos antes",
+    "Iniciar serviço",
+    "Execução",
+    "Fotos depois",
+    "Assinatura",
+    "Concluir serviço",
+  ];
+
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/85 p-3 backdrop-blur-sm md:p-6">
-      <div className="mx-auto min-h-full max-w-6xl rounded-3xl border border-yellow-400/30 bg-zinc-950 shadow-2xl">
-        <header className="sticky top-0 z-10 flex flex-col gap-4 rounded-t-3xl border-b border-zinc-800 bg-black/95 p-5 backdrop-blur md:flex-row md:items-center md:justify-between">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/90 p-2 backdrop-blur-sm md:p-4">
+      <div className="mx-auto min-h-full max-w-[1500px] overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 shadow-2xl">
+        <header className="sticky top-0 z-20 flex flex-col gap-4 border-b border-zinc-800 bg-black/95 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs font-black uppercase text-yellow-400">
-              Ordem de Serviço
+              Ordem de serviço
             </p>
             <h2 className="mt-1 text-2xl font-black uppercase text-white">
               {rascunho.clienteNome}
@@ -266,322 +345,240 @@ function registrarChegadaCliente() {
           </div>
         </header>
 
-        <div className="space-y-5 p-4 md:p-6">
-          {mensagem && (
-            <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">
-              {mensagem}
-            </div>
-          )}
-
-          <section className="grid gap-4 rounded-2xl border border-zinc-800 bg-black p-5 md:grid-cols-2 lg:grid-cols-4">
-            <Info titulo="Cliente" valor={rascunho.clienteNome} />
-            <Info
-              titulo="Telefone / WhatsApp"
-              valor={
-                ehAdministrador
-                  ? rascunho.clienteTelefone || "Não informado"
-                  : "Contato restrito à gerência"
-              }
-            />
-            <Info titulo="Data e horário" valor={`${rascunho.data} às ${rascunho.horario}`} />
-            <Info titulo="Responsável" valor={rascunho.equipe} />
-            <div className="md:col-span-2 lg:col-span-3">
-              <Info titulo="Endereço" valor={`${rascunho.endereco}, ${rascunho.cidade}`} />
-            </div>
-            <button
-              type="button"
-              onClick={() => aoAbrirMaps(rascunho.endereco, rascunho.cidade)}
-              className="rounded-xl bg-yellow-400 px-4 py-3 font-black uppercase text-black"
-            >
-              Abrir no Maps
-            </button>
-          </section>
-<section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-  <h3 className="text-lg font-black uppercase text-yellow-400">
-    Deslocamento e custos
-  </h3>
-
-  <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-    <CampoNumero
-      label="Quilometragem inicial"
-      valor={rascunho.quilometragemInicial}
-      onChange={(valor) =>
-        setRascunho((atual) => ({
-          ...atual,
-          quilometragemInicial: valor,
-        }))
-      }
-      bloqueado={bloqueado}
-    />
-
-    <CampoNumero
-      label="Quilometragem final"
-      valor={rascunho.quilometragemFinal}
-      onChange={(valor) =>
-        setRascunho((atual) => ({
-          ...atual,
-          quilometragemFinal: valor,
-        }))
-      }
-      bloqueado={bloqueado}
-    />
-
-    <CampoNumero
-      label="Combustível"
-      valor={rascunho.despesas?.combustivel}
-      onChange={(valor) =>
-        setRascunho((atual) => ({
-          ...atual,
-          despesas: {
-            combustivel: valor ?? 0,
-            alimentacao: atual.despesas?.alimentacao ?? 0,
-            pedagio: atual.despesas?.pedagio ?? 0,
-            outros: atual.despesas?.outros ?? 0,
-            descricaoOutros: atual.despesas?.descricaoOutros,
-          },
-        }))
-      }
-      bloqueado={bloqueado}
-      moeda
-    />
-
-    <CampoNumero
-      label="Alimentação"
-      valor={rascunho.despesas?.alimentacao}
-      onChange={(valor) =>
-        setRascunho((atual) => ({
-          ...atual,
-          despesas: {
-            combustivel: atual.despesas?.combustivel ?? 0,
-            alimentacao: valor ?? 0,
-            pedagio: atual.despesas?.pedagio ?? 0,
-            outros: atual.despesas?.outros ?? 0,
-            descricaoOutros: atual.despesas?.descricaoOutros,
-          },
-        }))
-      }
-      bloqueado={bloqueado}
-      moeda
-    />
-
-    <CampoNumero
-      label="Pedágio"
-      valor={rascunho.despesas?.pedagio}
-      onChange={(valor) =>
-        setRascunho((atual) => ({
-          ...atual,
-          despesas: {
-            combustivel: atual.despesas?.combustivel ?? 0,
-            alimentacao: atual.despesas?.alimentacao ?? 0,
-            pedagio: valor ?? 0,
-            outros: atual.despesas?.outros ?? 0,
-            descricaoOutros: atual.despesas?.descricaoOutros,
-          },
-        }))
-      }
-      bloqueado={bloqueado}
-      moeda
-    />
-
-    <CampoNumero
-      label="Outras despesas"
-      valor={rascunho.despesas?.outros}
-      onChange={(valor) =>
-        setRascunho((atual) => ({
-          ...atual,
-          despesas: {
-            combustivel: atual.despesas?.combustivel ?? 0,
-            alimentacao: atual.despesas?.alimentacao ?? 0,
-            pedagio: atual.despesas?.pedagio ?? 0,
-            outros: valor ?? 0,
-            descricaoOutros: atual.despesas?.descricaoOutros,
-          },
-        }))
-      }
-      bloqueado={bloqueado}
-      moeda
-    />
-  </div>
-
-  <div className="mt-4">
-    <label className="mb-2 block text-xs font-black uppercase text-zinc-500">
-      Descrição de outras despesas
-    </label>
-
-    <input
-      type="text"
-      value={rascunho.despesas?.descricaoOutros ?? ""}
-      disabled={bloqueado}
-      onChange={(evento) =>
-        setRascunho((atual) => ({
-          ...atual,
-          despesas: {
-            combustivel: atual.despesas?.combustivel ?? 0,
-            alimentacao: atual.despesas?.alimentacao ?? 0,
-            pedagio: atual.despesas?.pedagio ?? 0,
-            outros: atual.despesas?.outros ?? 0,
-            descricaoOutros: evento.target.value,
-          },
-        }))
-      }
-      placeholder="Ex.: estacionamento, compra emergencial ou ferramenta"
-      className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-400 disabled:cursor-not-allowed disabled:opacity-70"
-    />
-  </div>
-</section>
-          <ChecklistServico
-            itens={rascunho.checklist ?? []}
-            aoAlterar={atualizarChecklist}
-            bloqueado={bloqueado}
-          />
-
-
-          <MateriaisServico
-            materiais={rascunho.materiais ?? []}
-            aoAlterar={atualizarMateriais}
-            bloqueado={bloqueado}
-          />
-
-          <FotosServico
-            fotos={rascunho.fotos ?? []}
-            aoAlterar={atualizarFotos}
-            bloqueado={bloqueado}
-          />
-
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
-            <h3 className="text-lg font-black uppercase text-yellow-400">
-              Observações técnicas
-            </h3>
-            <textarea
-              value={rascunho.observacoesTecnico ?? ""}
-              disabled={bloqueado}
-              onChange={(evento) =>
-                setRascunho((atual) => ({
-                  ...atual,
-                  observacoesTecnico: evento.target.value,
-                }))
-              }
-              rows={5}
-              placeholder="Informe detalhes da execução, dificuldades, pendências ou orientações ao cliente."
-              className="mt-4 w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-400 disabled:cursor-not-allowed disabled:opacity-70"
-            />
-          </section>
-
-          <AssinaturaServico
-            assinatura={rascunho.assinaturaCliente}
-            aoAlterar={(assinaturaCliente) =>
-              setRascunho((atual) => ({ ...atual, assinaturaCliente }))
-            }
-            bloqueado={bloqueado}
-          />
-
-          <HistoricoServico historico={rascunho.historico ?? []} />
-
-          <footer className="flex flex-col-reverse gap-3 rounded-2xl border border-zinc-800 bg-black p-4 sm:flex-row sm:justify-end">
-            <button
-              type="button"
-              onClick={salvarAndamento}
-              disabled={bloqueado}
-              className="rounded-xl border border-yellow-400 px-5 py-3 font-black uppercase text-yellow-400 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Salvar andamento
-            </button>
-
-            {rascunho.status === "Agendado" && (
-  <button
-    type="button"
-    onClick={registrarSaidaEmpresa}
-    className="rounded-xl bg-blue-500 px-5 py-3 font-black uppercase text-white"
-  >
-    Sair da empresa
-  </button>
-)}
-
-{rascunho.status === "Em deslocamento" &&
-  !rascunho.chegadaClienteEm && (
-    <button
-      type="button"
-      onClick={registrarChegadaCliente}
-      className="rounded-xl bg-orange-500 px-5 py-3 font-black uppercase text-black"
-    >
-      Cheguei ao cliente
-    </button>
-  )}
-
-{rascunho.status === "Em deslocamento" &&
-  rascunho.chegadaClienteEm && (
-    <button
-      type="button"
-      onClick={iniciarServico}
-      className="rounded-xl bg-yellow-400 px-5 py-3 font-black uppercase text-black"
-    >
-      Iniciar serviço
-    </button>
-  )}
-
-            {rascunho.status !== "Concluído" && (
-              <button
-                type="button"
-                onClick={concluirServico}
-                className="rounded-xl bg-emerald-500 px-5 py-3 font-black uppercase text-black"
-              >
-                Concluir serviço
-              </button>
-            )}
-          </footer>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CampoNumero({
-  label,
-  valor,
-  onChange,
-  bloqueado,
-  moeda = false,
-}: {
-  label: string;
-  valor?: number;
-  onChange: (valor?: number) => void;
-  bloqueado: boolean;
-  moeda?: boolean;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-xs font-black uppercase text-zinc-500">
-        {label}
-      </label>
-
-      <div className="relative">
-        {moeda && (
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-zinc-500">
-            R$
-          </span>
+        {mensagem && (
+          <div className="mx-4 mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">
+            {mensagem}
+          </div>
         )}
 
-        <input
-          type="number"
-          min="0"
-          step={moeda ? "0.01" : "1"}
-          value={valor ?? ""}
-          disabled={bloqueado}
-          onChange={(evento) =>
-            onChange(
-              evento.target.value === ""
-                ? undefined
-                : Number(evento.target.value),
-            )
-          }
-          className={`w-full rounded-xl border border-zinc-700 bg-black py-3 pr-4 text-white outline-none focus:border-yellow-400 disabled:cursor-not-allowed disabled:opacity-70 ${
-            moeda ? "pl-11" : "px-4"
-          }`}
-        />
+        <div className="grid gap-4 p-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(520px,1.15fr)]">
+          <div className="min-w-0 space-y-4">
+            {!rascunho.saidaEmpresaEm && (
+              <ChecklistServico
+                itens={rascunho.checklist ?? []}
+                aoAlterar={atualizarChecklist}
+                bloqueado={checklistEncerrado}
+                tipoServico={rascunho.tipoServico}
+                aoSairDaEmpresa={registrarSaidaEmpresa}
+                podeSair={checklistCompleto}
+                saidaRegistrada={Boolean(rascunho.saidaEmpresaEm)}
+              />
+            )}
+
+            {rascunho.saidaEmpresaEm &&
+              !rascunho.chegadaClienteEm &&
+              !servicoConcluido && (
+                <section className="rounded-2xl border border-zinc-800 bg-black p-5">
+                  <h3 className="text-lg font-black uppercase text-yellow-400">
+                    Deslocamento
+                  </h3>
+                  <p className="mt-2 text-zinc-400">
+                    Saída registrada. Ao chegar, confirme a chegada ao cliente.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={registrarChegadaCliente}
+                    className="mt-5 w-full rounded-xl bg-yellow-400 px-5 py-4 font-black uppercase text-black"
+                  >
+                    Cheguei ao cliente
+                  </button>
+                </section>
+              )}
+
+            {chegouAoCliente && !servicoIniciado && !servicoConcluido && (
+              <section className="space-y-4">
+                <FotosServico
+                  fotos={rascunho.fotos ?? []}
+                  aoAlterar={atualizarFotos}
+                  bloqueado={bloqueado}
+                  etapasPermitidas={["Antes"]}
+                />
+
+                <button
+                  type="button"
+                  onClick={iniciarServico}
+                  disabled={fotosAntes === 0}
+                  className="w-full rounded-xl bg-yellow-400 px-5 py-4 font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Iniciar serviço
+                </button>
+              </section>
+            )}
+
+            {servicoIniciado && !servicoConcluido && (
+              <div className="space-y-4">
+                <MateriaisServico
+                  materiais={rascunho.materiais ?? []}
+                  aoAlterar={atualizarMateriais}
+                  bloqueado={bloqueado}
+                />
+
+                <FotosServico
+                  fotos={rascunho.fotos ?? []}
+                  aoAlterar={atualizarFotos}
+                  bloqueado={bloqueado}
+                  etapasPermitidas={["Durante", "Depois"]}
+                />
+
+                <section className="rounded-2xl border border-zinc-800 bg-black p-5">
+                  <h3 className="text-lg font-black uppercase text-yellow-400">
+                    Observações técnicas
+                  </h3>
+                  <textarea
+                    value={rascunho.observacoesTecnico ?? ""}
+                    disabled={bloqueado}
+                    onChange={(evento) =>
+                      setRascunho((atual) => ({
+                        ...atual,
+                        observacoesTecnico: evento.target.value,
+                      }))
+                    }
+                    rows={4}
+                    placeholder="Informe detalhes da execução, dificuldades, pendências ou orientações."
+                    className="mt-4 w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none focus:border-yellow-400"
+                  />
+                </section>
+
+                <AssinaturaServico
+                  assinatura={rascunho.assinaturaCliente}
+                  aoAlterar={(assinaturaCliente) =>
+                    setRascunho((atual) => ({ ...atual, assinaturaCliente }))
+                  }
+                  bloqueado={bloqueado}
+                />
+
+                <button
+                  type="button"
+                  onClick={concluirServico}
+                  disabled={fotosDepois === 0 || !rascunho.assinaturaCliente}
+                  className="w-full rounded-xl bg-yellow-400 px-5 py-4 font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Concluir serviço
+                </button>
+              </div>
+            )}
+
+            {servicoConcluido && (
+              <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+                <h3 className="text-lg font-black uppercase text-emerald-300">
+                  Serviço concluído
+                </h3>
+                <p className="mt-2 text-zinc-300">
+                  A ordem foi finalizada e permanece disponível para consulta.
+                </p>
+              </section>
+            )}
+          </div>
+
+          <div className="min-w-0 space-y-4">
+            <section className="rounded-2xl border border-zinc-800 bg-black p-5">
+              <div className="grid grid-cols-4 gap-3 sm:grid-cols-8">
+                {etapasFluxo.map((titulo, indice) => {
+                  const numero = indice + 1;
+                  const concluida = numero < etapaAtual;
+                  const ativa = numero === etapaAtual;
+
+                  return (
+                    <div key={titulo} className="min-w-0 text-center">
+                      <div
+                        className={`mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-sm font-black ${
+                          ativa
+                            ? "border-yellow-400 bg-yellow-400 text-black"
+                            : concluida
+                              ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-300"
+                              : "border-zinc-700 bg-zinc-950 text-zinc-500"
+                        }`}
+                      >
+                        {concluida ? "✓" : numero}
+                      </div>
+                      <p
+                        className={`mt-2 text-[10px] font-bold leading-tight sm:text-xs ${
+                          ativa ? "text-yellow-400" : "text-zinc-500"
+                        }`}
+                      >
+                        {titulo}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="rounded-2xl border border-zinc-800 bg-black p-5">
+              <h3 className="text-lg font-black uppercase text-yellow-400">
+                Dados do cliente
+              </h3>
+
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <Info titulo="Cliente" valor={rascunho.clienteNome} />
+                <Info
+                  titulo="Telefone / WhatsApp"
+                  valor={
+                    podeVerContatoCliente
+                      ? rascunho.clienteTelefone || "Não informado"
+                      : "Contato restrito à gerência"
+                  }
+                />
+                <div className="sm:col-span-2">
+                  <Info
+                    titulo="Endereço"
+                    valor={`${rascunho.endereco}, ${rascunho.cidade}`}
+                  />
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => aoAbrirMaps(rascunho.endereco, rascunho.cidade)}
+                className="mt-4 rounded-xl border border-yellow-400 px-4 py-3 font-black uppercase text-yellow-400"
+              >
+                Abrir no Maps
+              </button>
+            </section>
+
+            <section className="rounded-2xl border border-zinc-800 bg-black p-5">
+              <h3 className="text-lg font-black uppercase text-yellow-400">
+                Informações do serviço
+              </h3>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Info titulo="Tipo de serviço" valor={rascunho.tipoServico} />
+                <Info titulo="Responsável" valor={rascunho.equipe} />
+                <Info titulo="Data" valor={rascunho.data} />
+                <Info titulo="Horário" valor={rascunho.horario} />
+                <div className="sm:col-span-2">
+                  <Info titulo="Descrição" valor={rascunho.descricao || "—"} />
+                </div>
+              </div>
+            </section>
+
+            <HistoricoServico historico={rascunho.historico ?? []} />
+          </div>
+        </div>
+
+        <footer className="flex flex-col-reverse gap-3 border-t border-zinc-800 bg-black p-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={salvarAndamento}
+            disabled={bloqueado}
+            className="rounded-xl border border-zinc-700 px-5 py-3 font-black uppercase text-zinc-300 disabled:opacity-40"
+          >
+            Salvar andamento
+          </button>
+
+          <button
+            type="button"
+            onClick={aoFechar}
+            className="rounded-xl border border-red-500 px-5 py-3 font-black uppercase text-red-400"
+          >
+            Fechar ordem
+          </button>
+        </footer>
       </div>
     </div>
   );
 }
+
 function Info({ titulo, valor }: { titulo: string; valor: string }) {
   return (
     <div>

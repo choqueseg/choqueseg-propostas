@@ -1,6 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
+
+const supabase = createClient();
 
 
 type ClienteCRM = {
@@ -136,6 +139,14 @@ const STATUS_PROJETO: StatusProjeto[] = [
   "Medidor substituído",
   "Sistema funcionando / gerando",
 ];
+
+function agruparStatusProjeto(statuses: StatusProjeto[], tamanho = 5) {
+  const grupos: StatusProjeto[][] = [];
+  for (let i = 0; i < statuses.length; i += tamanho) {
+    grupos.push(statuses.slice(i, i + tamanho));
+  }
+  return grupos;
+}
 
 const DOCUMENTOS_PADRAO = [
   "Documento do cliente (RG / CNH)",
@@ -379,6 +390,31 @@ const BITOLAS_CABO_TERRA = [
   "Outro",
 ];
 
+type StatusFunilSolar =
+  | "Etapa de Obra"
+  | "Projeto Aprovado"
+  | "Solicitar Vistoria"
+  | "Medidor Trocado"
+  | "Pós-venda";
+
+function statusFunilParaProjeto(status: StatusProjeto): StatusFunilSolar | null {
+  switch (status) {
+    case "Obra da concessionária":
+      return "Etapa de Obra";
+    case "Aprovado":
+      return "Projeto Aprovado";
+    case "Vistoria solicitada":
+    case "Aguardando vistoria / troca do medidor":
+      return "Solicitar Vistoria";
+    case "Medidor substituído":
+      return "Medidor Trocado";
+    case "Sistema funcionando / gerando":
+      return "Pós-venda";
+    default:
+      return null;
+  }
+}
+
 export default function EngenhariaModule() {
   const [secaoAtiva, setSecaoAtiva] = useState<
     "projetos" | "novo" | "documentacao" | "pendencias" | "arquivos"
@@ -464,6 +500,28 @@ export default function EngenhariaModule() {
       ),
     [projetos],
   );
+
+  async function sincronizarProjetoComFunil(item: ProjetoEngenharia) {
+    if (!item.clienteId) return;
+
+    const statusFunil = statusFunilParaProjeto(item.status);
+    if (!statusFunil) return;
+
+    const { error } = await supabase
+      .from("clientes")
+      .update({
+        status: statusFunil,
+        retorno_em: null,
+      })
+      .eq("id", item.clienteId);
+
+    if (error) {
+      console.error("Erro ao sincronizar Engenharia com o Funil:", error);
+      setMensagem(
+        `Projeto salvo, mas não foi possível atualizar o Funil: ${error.message}`,
+      );
+    }
+  }
 
   function salvarLista(novaLista: ProjetoEngenharia[]) {
     setProjetos(novaLista);
@@ -626,7 +684,7 @@ export default function EngenhariaModule() {
     setSecaoAtiva("novo");
   }
 
-  function salvarProjeto() {
+  async function salvarProjeto() {
     if (!projeto.clienteNome.trim()) {
       alert("Informe o nome do cliente.");
       return;
@@ -650,6 +708,7 @@ export default function EngenhariaModule() {
       : [final, ...projetos];
 
     salvarLista(novaLista);
+    await sincronizarProjetoComFunil(final);
     setProjeto(final);
     setEditandoId(final.id);
     setMensagem("Projeto salvo com sucesso.");
@@ -672,20 +731,25 @@ export default function EngenhariaModule() {
     setSecaoAtiva("novo");
   }
 
-  function moverProjetoStatus(id: string, novoStatus: StatusProjeto) {
+  async function moverProjetoStatus(id: string, novoStatus: StatusProjeto) {
     const agora = new Date().toISOString();
 
-    salvarLista(
-      projetos.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: novoStatus,
-              atualizadoEm: agora,
-            }
-          : item,
-      ),
+    const novaLista = projetos.map((item) =>
+      item.id === id
+        ? {
+            ...item,
+            status: novoStatus,
+            atualizadoEm: agora,
+          }
+        : item,
     );
+
+    salvarLista(novaLista);
+
+    const projetoMovido = novaLista.find((item) => item.id === id);
+    if (projetoMovido) {
+      await sincronizarProjetoComFunil(projetoMovido);
+    }
 
     setMensagem(`Projeto movido para: ${novoStatus}.`);
   }
@@ -738,7 +802,7 @@ export default function EngenhariaModule() {
     }));
   }
 
-  function salvarAlteracoesProjetoAtual() {
+  async function salvarAlteracoesProjetoAtual() {
     if (!editandoId) {
       salvarProjeto();
       return;
@@ -754,6 +818,7 @@ export default function EngenhariaModule() {
       projetos.map((item) => (item.id === editandoId ? atualizado : item)),
     );
 
+    await sincronizarProjetoComFunil(atualizado);
     setProjeto(atualizado);
     setMensagem("Alterações salvas.");
   }
@@ -778,49 +843,47 @@ export default function EngenhariaModule() {
         </div>
       )}
 
-      <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
-        <aside className="lg:sticky lg:top-4 lg:w-64 lg:shrink-0">
-          <div className="rounded-2xl border border-zinc-800 bg-black p-2">
-            <p className="px-3 py-2 text-xs font-black uppercase text-zinc-500">
-              Menu de engenharia
-            </p>
+      <div className="mt-7 space-y-5">
+        <nav className="rounded-2xl border border-zinc-800 bg-black p-3">
+          <p className="mb-3 text-xs font-black uppercase text-zinc-500">
+            Menu de engenharia
+          </p>
 
-            <nav className="flex flex-col gap-2">
-              <BotaoMenu
-                ativo={secaoAtiva === "projetos"}
-                icone="📋"
-                titulo="Projetos"
-                onClick={() => setSecaoAtiva("projetos")}
-              />
-              <BotaoMenu
-                ativo={secaoAtiva === "novo"}
-                icone="➕"
-                titulo="Novo projeto"
-                onClick={novoProjeto}
-              />
-              <BotaoMenu
-                ativo={secaoAtiva === "documentacao"}
-                icone="📑"
-                titulo="Documentação"
-                onClick={() => setSecaoAtiva("documentacao")}
-              />
-              <BotaoMenu
-                ativo={secaoAtiva === "pendencias"}
-                icone="⚠️"
-                titulo="Pendências"
-                onClick={() => setSecaoAtiva("pendencias")}
-              />
-              <BotaoMenu
-                ativo={secaoAtiva === "arquivos"}
-                icone="📁"
-                titulo="Arquivos"
-                onClick={() => setSecaoAtiva("arquivos")}
-              />
-            </nav>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+            <BotaoMenu
+              ativo={secaoAtiva === "projetos"}
+              icone="📋"
+              titulo="Projetos"
+              onClick={() => setSecaoAtiva("projetos")}
+            />
+            <BotaoMenu
+              ativo={secaoAtiva === "novo"}
+              icone="➕"
+              titulo="Novo projeto"
+              onClick={novoProjeto}
+            />
+            <BotaoMenu
+              ativo={secaoAtiva === "documentacao"}
+              icone="📑"
+              titulo="Documentação"
+              onClick={() => setSecaoAtiva("documentacao")}
+            />
+            <BotaoMenu
+              ativo={secaoAtiva === "pendencias"}
+              icone="⚠️"
+              titulo="Pendências"
+              onClick={() => setSecaoAtiva("pendencias")}
+            />
+            <BotaoMenu
+              ativo={secaoAtiva === "arquivos"}
+              icone="📁"
+              titulo="Arquivos"
+              onClick={() => setSecaoAtiva("arquivos")}
+            />
           </div>
-        </aside>
+        </nav>
 
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0">
           {secaoAtiva === "projetos" && (
             <section className="rounded-3xl border border-zinc-800 bg-black p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -847,125 +910,18 @@ export default function EngenhariaModule() {
                   Nenhum projeto cadastrado.
                 </div>
               ) : (
-                <div className="mt-5 overflow-x-auto pb-3">
-                  <div className="flex min-w-max gap-4">
-                    {STATUS_PROJETO.map((status) => {
-                      const itens = projetosFiltrados.filter(
-                        (item) => item.status === status,
-                      );
-
-                      return (
-                        <section
-                          key={status}
-                          onDragOver={(evento) => evento.preventDefault()}
-                          onDrop={(evento) => {
-                            const id = evento.dataTransfer.getData("text/plain");
-                            if (id) moverProjetoStatus(id, status);
-                          }}
-                          className="w-[300px] shrink-0 rounded-2xl border border-zinc-800 bg-zinc-950 p-3"
-                        >
-                          <div className="mb-3 flex items-center justify-between gap-2">
-                            <h4 className="text-sm font-black uppercase text-yellow-400">
-                              {status}
-                            </h4>
-                            <span className="rounded-full bg-zinc-800 px-2 py-1 text-xs font-black text-zinc-300">
-                              {itens.length}
-                            </span>
-                          </div>
-
-                          <div className="space-y-3">
-                            {itens.length === 0 ? (
-                              <div className="rounded-xl border border-dashed border-zinc-800 p-5 text-center text-xs text-zinc-600">
-                                Sem projetos
-                              </div>
-                            ) : (
-                              itens.map((item) => {
-                                const indiceStatus = STATUS_PROJETO.indexOf(
-                                  item.status,
-                                );
-                                const anterior =
-                                  indiceStatus > 0
-                                    ? STATUS_PROJETO[indiceStatus - 1]
-                                    : null;
-                                const proximo =
-                                  indiceStatus < STATUS_PROJETO.length - 1
-                                    ? STATUS_PROJETO[indiceStatus + 1]
-                                    : null;
-
-                                return (
-                                  <article
-                                    key={item.id}
-                                    draggable
-                                    onDragStart={(evento) =>
-                                      evento.dataTransfer.setData(
-                                        "text/plain",
-                                        item.id,
-                                      )
-                                    }
-                                    className="cursor-grab rounded-xl border border-zinc-700 bg-black p-4 active:cursor-grabbing"
-                                  >
-                                    <h5 className="font-black text-white">
-                                      {item.clienteNome}
-                                    </h5>
-                                    <p className="mt-1 text-xs text-zinc-500">
-                                      {item.cidade || "Cidade não informada"}
-                                    </p>
-                                    <p className="mt-2 text-xs text-zinc-400">
-                                      {item.quantidadeModulos || "—"} módulos ·{" "}
-                                      {item.potenciaInversor || "Inversor não informado"}
-                                    </p>
-
-                                    {item.status === "Obra da concessionária" &&
-                                      item.observacaoObraConcessionaria && (
-                                        <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/5 p-2 text-xs text-orange-300">
-                                          {item.observacaoObraConcessionaria}
-                                        </p>
-                                      )}
-
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                      {anterior && (
-                                        <button
-                                          type="button"
-                                          title={`Mover para ${anterior}`}
-                                          onClick={() =>
-                                            moverProjetoStatus(item.id, anterior)
-                                          }
-                                          className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-black text-zinc-300"
-                                        >
-                                          ←
-                                        </button>
-                                      )}
-
-                                      <button
-                                        type="button"
-                                        onClick={() => abrirProjeto(item)}
-                                        className="flex-1 rounded-lg bg-yellow-400 px-3 py-2 text-xs font-black uppercase text-black"
-                                      >
-                                        Abrir
-                                      </button>
-
-                                      {proximo && (
-                                        <button
-                                          type="button"
-                                          title={`Mover para ${proximo}`}
-                                          onClick={() =>
-                                            moverProjetoStatus(item.id, proximo)
-                                          }
-                                          className="rounded-lg border border-yellow-400 px-3 py-2 text-xs font-black text-yellow-400"
-                                        >
-                                          →
-                                        </button>
-                                      )}
-                                    </div>
-                                  </article>
-                                );
-                              })
-                            )}
-                          </div>
-                        </section>
-                      );
-                    })}
-                  </div>
+                <div className="mt-5 space-y-5">
+                  {agruparStatusProjeto(STATUS_PROJETO, 6).map(
+                    (grupo, indiceGrupo) => (
+                      <LinhaProjetos
+                        key={`linha-${indiceGrupo}`}
+                        statusGrupo={grupo}
+                        projetos={projetosFiltrados}
+                        aoMover={moverProjetoStatus}
+                        aoAbrir={abrirProjeto}
+                      />
+                    ),
+                  )}
                 </div>
               )}
             </section>
@@ -1408,6 +1364,166 @@ export default function EngenhariaModule() {
             </section>
           )}
         </main>
+      </div>
+    </section>
+  );
+}
+
+function LinhaProjetos({
+  statusGrupo,
+  projetos,
+  aoMover,
+  aoAbrir,
+}: {
+  statusGrupo: StatusProjeto[];
+  projetos: ProjetoEngenharia[];
+  aoMover: (id: string, novoStatus: StatusProjeto) => void;
+  aoAbrir: (item: ProjetoEngenharia) => void;
+}) {
+  const topoRef = useRef<HTMLDivElement | null>(null);
+  const conteudoRef = useRef<HTMLDivElement | null>(null);
+  const sincronizando = useRef(false);
+
+  function sincronizar(origem: "topo" | "conteudo", valor: number) {
+    if (sincronizando.current) return;
+    sincronizando.current = true;
+
+    const destino = origem === "topo" ? conteudoRef.current : topoRef.current;
+    if (destino) destino.scrollLeft = valor;
+
+    requestAnimationFrame(() => {
+      sincronizando.current = false;
+    });
+  }
+
+  return (
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-2">
+      <div
+        ref={topoRef}
+        onScroll={(evento) =>
+          sincronizar("topo", evento.currentTarget.scrollLeft)
+        }
+        className="overflow-x-auto pb-2"
+      >
+        <div className="h-2 min-w-[900px] lg:min-w-0" />
+      </div>
+
+      <div
+        ref={conteudoRef}
+        onScroll={(evento) =>
+          sincronizar("conteudo", evento.currentTarget.scrollLeft)
+        }
+        className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div className="grid min-w-[900px] grid-cols-6 gap-2 lg:min-w-0">
+          {statusGrupo.map((status) => {
+            const itens = projetos.filter((item) => item.status === status);
+
+            return (
+              <section
+                key={status}
+                onDragOver={(evento) => evento.preventDefault()}
+                onDrop={(evento) => {
+                  const id = evento.dataTransfer.getData("text/plain");
+                  if (id) void aoMover(id, status);
+                }}
+                className="min-w-0 rounded-2xl border border-zinc-800 bg-black p-2.5"
+              >
+                <div className="flex min-h-[44px] items-start justify-between gap-2 border-b border-zinc-800 pb-2.5">
+                  <h4 className="text-xs font-black uppercase leading-tight text-yellow-400">
+                    {status}
+                  </h4>
+                  <span className="shrink-0 rounded-full bg-yellow-400 px-2.5 py-1 text-xs font-black text-black">
+                    {itens.length}
+                  </span>
+                </div>
+
+                <div className="mt-2.5 min-h-[150px] space-y-2.5">
+                  {itens.length === 0 ? (
+                    <div className="flex min-h-[130px] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950 p-4 text-center text-xs text-zinc-600">
+                      Sem projetos
+                    </div>
+                  ) : (
+                    itens.map((item) => {
+                      const indiceStatus = STATUS_PROJETO.indexOf(item.status);
+                      const anterior =
+                        indiceStatus > 0
+                          ? STATUS_PROJETO[indiceStatus - 1]
+                          : null;
+                      const proximo =
+                        indiceStatus < STATUS_PROJETO.length - 1
+                          ? STATUS_PROJETO[indiceStatus + 1]
+                          : null;
+
+                      return (
+                        <article
+                          key={item.id}
+                          draggable
+                          onDragStart={(evento) =>
+                            evento.dataTransfer.setData("text/plain", item.id)
+                          }
+                          className="cursor-grab rounded-xl border border-zinc-700 bg-zinc-950 p-2 active:cursor-grabbing"
+                        >
+                          <h5 className="truncate text-sm font-black leading-tight text-white">
+                            {item.clienteNome}
+                          </h5>
+
+                          <p className="mt-1 truncate text-[11px] leading-tight text-zinc-500">
+                            {item.cidade || "Cidade não informada"}
+                          </p>
+
+                          <p className="mt-2 text-[11px] leading-snug text-zinc-400">
+                            {item.quantidadeModulos || "—"} módulos ·{" "}
+                            {item.potenciaInversor || "Inversor não informado"}
+                          </p>
+
+                          {item.status === "Obra da concessionária" &&
+                            item.observacaoObraConcessionaria && (
+                              <p className="mt-2 rounded-lg border border-orange-500/30 bg-orange-500/5 p-2 text-xs text-orange-300">
+                                {item.observacaoObraConcessionaria}
+                              </p>
+                            )}
+
+                          <div className="mt-3 flex gap-2">
+                            {anterior && (
+                              <button
+                                type="button"
+                                title={`Mover para ${anterior}`}
+                                onClick={() => void aoMover(item.id, anterior)}
+                                className="rounded-lg border border-zinc-700 px-2 py-1.5 text-[11px] font-black text-zinc-300"
+                              >
+                                ←
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => aoAbrir(item)}
+                              className="min-w-0 flex-1 rounded-lg bg-yellow-400 px-2 py-1.5 text-[11px] font-black uppercase text-black"
+                            >
+                              Abrir
+                            </button>
+
+                            {proximo && (
+                              <button
+                                type="button"
+                                title={`Mover para ${proximo}`}
+                                onClick={() => void aoMover(item.id, proximo)}
+                                className="rounded-lg border border-yellow-400 px-2 py-1.5 text-[11px] font-black text-yellow-400"
+                              >
+                                →
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })
+                  )}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       </div>
     </section>
   );

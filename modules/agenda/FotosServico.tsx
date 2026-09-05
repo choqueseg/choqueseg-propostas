@@ -7,6 +7,7 @@ type Props = {
   fotos: FotoServico[];
   aoAlterar: (fotos: FotoServico[]) => void;
   bloqueado?: boolean;
+  etapasPermitidas?: FotoServico["etapa"][];
 };
 
 const ETAPAS: FotoServico["etapa"][] = ["Antes", "Durante", "Depois"];
@@ -20,13 +21,23 @@ function lerArquivo(arquivo: File): Promise<string> {
   });
 }
 
-export default function FotosServico({ fotos, aoAlterar, bloqueado }: Props) {
+export default function FotosServico({
+  fotos,
+  aoAlterar,
+  bloqueado = false,
+  etapasPermitidas = ETAPAS,
+}: Props) {
   async function adicionar(
     etapa: FotoServico["etapa"],
     evento: ChangeEvent<HTMLInputElement>,
   ) {
     const arquivos = Array.from(evento.target.files ?? []);
-    if (bloqueado || arquivos.length === 0) return;
+    const etapaLiberada = etapasPermitidas.includes(etapa);
+
+    if (bloqueado || !etapaLiberada || arquivos.length === 0) {
+      evento.target.value = "";
+      return;
+    }
 
     try {
       const novasFotos = await Promise.all(
@@ -57,18 +68,34 @@ export default function FotosServico({ fotos, aoAlterar, bloqueado }: Props) {
         Fotos do serviço
       </h3>
       <p className="mt-1 text-sm text-zinc-500">
-        Evite muitas imagens em alta resolução, pois esta versão salva os dados no navegador.
+        Registre o estado antes do início e o resultado depois do serviço.
       </p>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         {ETAPAS.map((etapa) => {
           const fotosDaEtapa = fotos.filter((foto) => foto.etapa === etapa);
+          const etapaLiberada = !bloqueado && etapasPermitidas.includes(etapa);
 
           return (
-            <div key={etapa} className="rounded-xl border border-zinc-800 bg-black p-4">
+            <div
+              key={etapa}
+              className="rounded-xl border border-zinc-800 bg-black p-4"
+            >
               <div className="flex items-center justify-between gap-3">
-                <h4 className="font-black uppercase text-zinc-200">{etapa}</h4>
-                {!bloqueado && (
+                <div>
+                  <h4 className="font-black uppercase text-zinc-200">
+                    {etapa}
+                  </h4>
+                  <p className="mt-0.5 text-xs text-zinc-600">
+                    {etapaLiberada
+                      ? "Registro liberado"
+                      : bloqueado
+                        ? "Serviço bloqueado"
+                        : "Disponível na etapa correta"}
+                  </p>
+                </div>
+
+                {etapaLiberada && (
                   <label className="cursor-pointer rounded-lg bg-yellow-400 px-3 py-2 text-xs font-black uppercase text-black">
                     Adicionar
                     <input
@@ -90,12 +117,16 @@ export default function FotosServico({ fotos, aoAlterar, bloqueado }: Props) {
                   </p>
                 ) : (
                   fotosDaEtapa.map((foto) => (
-                    <div key={foto.id} className="relative overflow-hidden rounded-lg border border-zinc-800">
+                    <div
+                      key={foto.id}
+                      className="relative overflow-hidden rounded-lg border border-zinc-800"
+                    >
                       <img
                         src={foto.dados}
                         alt={`${etapa}: ${foto.nome}`}
                         className="h-28 w-full object-cover"
                       />
+
                       {!bloqueado && (
                         <button
                           type="button"

@@ -17,15 +17,19 @@ type OrigemCliente =
   | "Outro";
 
 type StatusCliente =
-  | "Novo Contato"
+  | "Novo Cliente"
   | "Orçamento Solicitado"
   | "Orçamento Enviado"
-  | "Retorno em 2 dias"
-  | "Negociação"
-  | "Serviço Fechado"
-  | "Agendado"
+  | "Cliente Ainda Não Decidiu"
+  | "Cliente Desistiu / Fechou com Outra Empresa"
+  | "Serviço Fechado / Adiantamento Pago"
+  | "Serviço Agendado"
   | "Em Execução"
-  | "Concluído"
+  | "Serviço Concluído"
+  | "Etapa de Obra"
+  | "Projeto Aprovado"
+  | "Solicitar Vistoria"
+  | "Medidor Trocado"
   | "Pós-venda";
 
 type Cliente = {
@@ -60,6 +64,35 @@ type ClienteBanco = {
 
 const supabase = createClient();
 
+function normalizarStatusLegado(status?: string | null): StatusCliente {
+  const mapa: Record<string, StatusCliente> = {
+    "Novo Contato": "Novo Cliente",
+    "Novo Cliente": "Novo Cliente",
+    "Orçamento Solicitado": "Orçamento Solicitado",
+    "Orçamento Enviado": "Orçamento Enviado",
+    "Retorno em 2 dias": "Cliente Ainda Não Decidiu",
+    "Negociação": "Cliente Ainda Não Decidiu",
+    "Cliente Ainda Não Decidiu": "Cliente Ainda Não Decidiu",
+    "Cliente Desistiu / Fechou com Outra Empresa":
+      "Cliente Desistiu / Fechou com Outra Empresa",
+    "Serviço Fechado": "Serviço Fechado / Adiantamento Pago",
+    "Serviço Fechado / Adiantamento Pago":
+      "Serviço Fechado / Adiantamento Pago",
+    "Agendado": "Serviço Agendado",
+    "Serviço Agendado": "Serviço Agendado",
+    "Em Execução": "Em Execução",
+    "Concluído": "Serviço Concluído",
+    "Serviço Concluído": "Serviço Concluído",
+    "Etapa de Obra": "Etapa de Obra",
+    "Projeto Aprovado": "Projeto Aprovado",
+    "Solicitar Vistoria": "Solicitar Vistoria",
+    "Medidor Trocado": "Medidor Trocado",
+    "Pós-venda": "Pós-venda",
+  };
+
+  return mapa[String(status ?? "")] ?? "Novo Cliente";
+}
+
 function clienteBancoParaApp(item: ClienteBanco): Cliente {
   const agora = new Date().toISOString();
 
@@ -73,9 +106,9 @@ function clienteBancoParaApp(item: ClienteBanco): Cliente {
     tipoServico: (item.tipo_servico ?? "Energia Solar") as TipoServico,
     origem: (item.origem ?? "WhatsApp") as OrigemCliente,
     observacoes: item.observacoes ?? "",
-    status: (item.status ?? "Novo Contato") as StatusCliente,
+    status: normalizarStatusLegado(item.status),
     criadoEm: item.criado_em ?? agora,
-    retornoEm: item.retorno_em ?? adicionarDoisDias(new Date()),
+    retornoEm: item.retorno_em ?? "",
   };
 }
 
@@ -92,7 +125,7 @@ function clienteAppParaBanco(cliente: Cliente) {
     observacoes: cliente.observacoes,
     status: cliente.status,
     criado_em: cliente.criadoEm,
-    retorno_em: cliente.retornoEm,
+    retorno_em: cliente.retornoEm?.trim() ? cliente.retornoEm : null,
   };
 }
 
@@ -127,10 +160,15 @@ function adicionarDoisDias(data: Date) {
 }
 
 function formatarData(dataIso: string) {
+  if (!dataIso) return "Não definido";
+
+  const data = new Date(dataIso);
+  if (Number.isNaN(data.getTime())) return "Não definido";
+
   return new Intl.DateTimeFormat("pt-BR", {
     dateStyle: "short",
     timeStyle: "short",
-  }).format(new Date(dataIso));
+  }).format(data);
 }
 
 export default function ClientesModule() {
@@ -176,9 +214,16 @@ export default function ClientesModule() {
 
       if (dadosLocais) {
         try {
-          const antigos = JSON.parse(dadosLocais) as Cliente[];
+          const antigosBrutos = JSON.parse(dadosLocais) as Cliente[];
+          const antigos = Array.isArray(antigosBrutos)
+            ? antigosBrutos.map((cliente) => ({
+                ...cliente,
+                status: normalizarStatusLegado(String(cliente.status)),
+                retornoEm: cliente.retornoEm ?? "",
+              }))
+            : [];
 
-          if (Array.isArray(antigos) && antigos.length > 0) {
+          if (antigos.length > 0) {
             const { data: migrados, error: erroMigracao } = await supabase
               .from("clientes")
               .upsert(antigos.map(clienteAppParaBanco), { onConflict: "id" })
@@ -296,9 +341,9 @@ const clientesFiltrados = useMemo(() => {
         tipoServico: formulario.tipoServico,
         origem: formulario.origem,
         observacoes: formulario.observacoes.trim(),
-        status: "Novo Contato",
+        status: "Novo Cliente",
         criadoEm: agora.toISOString(),
-        retornoEm: adicionarDoisDias(agora),
+        retornoEm: "",
       };
 
       const { error } = await supabase
@@ -377,7 +422,7 @@ const clientesFiltrados = useMemo(() => {
     if (!clienteAtual) return;
 
     const retornoEm =
-      status === "Retorno em 2 dias"
+      status === "Orçamento Enviado"
         ? adicionarDoisDias(new Date())
         : clienteAtual.retornoEm;
 
@@ -385,7 +430,7 @@ const clientesFiltrados = useMemo(() => {
       .from("clientes")
       .update({
         status,
-        retorno_em: retornoEm,
+        retorno_em: retornoEm?.trim() ? retornoEm : null,
       })
       .eq("id", id);
 
@@ -724,15 +769,19 @@ const clientesFiltrados = useMemo(() => {
               }
               className="rounded-xl border border-zinc-700 bg-black px-3 py-2 text-sm font-bold text-white outline-none focus:border-yellow-400"
             >
-              <option>Novo Contato</option>
+              <option>Novo Cliente</option>
               <option>Orçamento Solicitado</option>
               <option>Orçamento Enviado</option>
-              <option>Retorno em 2 dias</option>
-              <option>Negociação</option>
-              <option>Serviço Fechado</option>
-              <option>Agendado</option>
+              <option>Cliente Ainda Não Decidiu</option>
+              <option>Cliente Desistiu / Fechou com Outra Empresa</option>
+              <option>Serviço Fechado / Adiantamento Pago</option>
+              <option>Serviço Agendado</option>
               <option>Em Execução</option>
-              <option>Concluído</option>
+              <option>Serviço Concluído</option>
+              <option>Etapa de Obra</option>
+              <option>Projeto Aprovado</option>
+              <option>Solicitar Vistoria</option>
+              <option>Medidor Trocado</option>
               <option>Pós-venda</option>
             </select>
 

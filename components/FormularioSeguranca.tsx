@@ -14,7 +14,6 @@ import PreviewSeguranca, {
 const supabase = createClient();
 
 const WHATSAPP_CHOQUESEG = "5579999390653";
-const LINK_AVALIACAO_GOOGLE = "https://g.page/r/CTbFpWqrl-nMEBO/review";
 const CHAVE_PROPOSTA_EDICAO = "choqueseg-pro-proposta-edicao-id";
 
 type PropostaBanco = {
@@ -253,6 +252,10 @@ export default function FormularioSeguranca() {
   const [salvandoModeloKit, setSalvandoModeloKit] = useState(false);
   const [produtoSelecionado, setProdutoSelecionado] = useState("");
   const [desconto, setDesconto] = useState(0);
+  const [percentualCartao, setPercentualCartao] = useState(0);
+  const [parcelasCartao, setParcelasCartao] = useState(1);
+  const [mensagemWhatsApp, setMensagemWhatsApp] = useState("");
+  const [mostrarMensagemWhatsApp, setMostrarMensagemWhatsApp] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [gerandoPDFCelular, setGerandoPDFCelular] = useState(false);
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
@@ -312,6 +315,8 @@ export default function FormularioSeguranca() {
 
       let detalhes: {
         desconto?: number;
+        percentualCartao?: number;
+        parcelasCartao?: number;
         observacoes?: string;
         itens?: Array<{
           produtoId?: string;
@@ -342,6 +347,8 @@ export default function FormularioSeguranca() {
       setEndereco(proposta.cliente_endereco ?? "");
       setObservacoes(String(detalhes.observacoes ?? ""));
       setDesconto(Number(detalhes.desconto ?? 0));
+      setPercentualCartao(Number(detalhes.percentualCartao ?? 0));
+      setParcelasCartao(Math.max(1, Number(detalhes.parcelasCartao ?? 1)));
 
       const itensCarregados: ItemOrcamento[] = Array.isArray(detalhes.itens)
         ? detalhes.itens.map((item, indice) => ({
@@ -415,6 +422,10 @@ export default function FormularioSeguranca() {
         subtotal: totais.subtotal,
         desconto: totais.descontoAplicado,
         total: totais.totalFinal,
+        percentualCartao,
+        parcelasCartao,
+        totalCartao: pagamentoCartao.totalCartao,
+        parcelaCartao: pagamentoCartao.valorParcela,
         itens: itens.map((item) => ({
           produtoId: item.produtoId,
           descricao: item.descricao,
@@ -916,6 +927,19 @@ export default function FormularioSeguranca() {
     };
   }, [itens, desconto]);
 
+  const pagamentoCartao = useMemo(() => {
+    const parcelas = Math.max(1, Math.round(parcelasCartao || 1));
+    const acrescimo = Math.max(0, percentualCartao || 0);
+    const totalCartao = totais.totalFinal * (1 + acrescimo / 100);
+
+    return {
+      parcelas,
+      acrescimo,
+      totalCartao,
+      valorParcela: parcelas > 0 ? totalCartao / parcelas : totalCartao,
+    };
+  }, [parcelasCartao, percentualCartao, totais.totalFinal]);
+
   const dadosPreview: DadosPreviewSeguranca = {
     nome,
     telefone,
@@ -926,6 +950,9 @@ export default function FormularioSeguranca() {
     subtotal: totais.subtotal,
     desconto: totais.descontoAplicado,
     total: totais.totalFinal,
+    parcelasCartao: pagamentoCartao.parcelas,
+    totalCartao: pagamentoCartao.totalCartao,
+    parcelaCartao: pagamentoCartao.valorParcela,
   };
 
   function limparFormulario() {
@@ -938,6 +965,10 @@ export default function FormularioSeguranca() {
     setProdutoSelecionado("");
     setKitSelecionado("");
     setDesconto(0);
+    setPercentualCartao(0);
+    setParcelasCartao(1);
+    setMensagemWhatsApp("");
+    setMostrarMensagemWhatsApp(false);
     setItens([]);
     setPropostaEmEdicaoId("");
     setStatusPropostaEmEdicao("Rascunho");
@@ -1040,39 +1071,22 @@ export default function FormularioSeguranca() {
     try {
       setGerandoPDFCelular(true);
 
-      // O PDF para celular usa exatamente a mesma proposta visual,
-      // sem alterar capa, páginas, imagens, cores ou escopo.
       const pdf = await criarPdfDaPropostaVisual();
-      const blob = pdf.output("blob");
-      const arquivo = new File([blob], nomeArquivoPDF(), {
-        type: "application/pdf",
-      });
 
-      if (
-        typeof navigator.share === "function" &&
-        typeof navigator.canShare === "function" &&
-        navigator.canShare({ files: [arquivo] })
-      ) {
-        await navigator.share({
-          title: "Proposta CHOQUESEG",
-          text: `Olá, ${nome || "cliente"}! Segue a proposta de Segurança Eletrônica preparada pela CHOQUESEG.`,
-          files: [arquivo],
-        });
-        return;
-      }
-
+      // Evita o erro do navigator.share no Chrome após a geração assíncrona.
+      // O PDF é salvo normalmente e o WhatsApp é aberto pelo botão
+      // "Preparar mensagem", onde você revisa o texto antes de enviar.
       pdf.save(nomeArquivoPDF());
-      alert("PDF gerado. Agora você pode enviá-lo pelo WhatsApp.");
-    } catch (erro) {
-      if (erro instanceof DOMException && erro.name === "AbortError") {
-        return;
-      }
 
-      console.error("Erro ao gerar/compartilhar PDF:", erro);
+      alert(
+        "PDF gerado com sucesso. Agora clique em PREPARAR MENSAGEM para abrir o WhatsApp do cliente e anexar o PDF.",
+      );
+    } catch (erro) {
+      console.error("Erro ao gerar PDF para WhatsApp:", erro);
       alert(
         erro instanceof Error
           ? erro.message
-          : "Não foi possível gerar ou compartilhar o PDF.",
+          : "Não foi possível gerar o PDF para WhatsApp.",
       );
     } finally {
       setGerandoPDFCelular(false);
@@ -1093,16 +1107,73 @@ export default function FormularioSeguranca() {
     );
   }
 
-  function abrirWhatsAppCliente() {
+  function montarMensagemProposta() {
+    const primeiroNome = nome.trim().split(/\s+/)[0] || "cliente";
+
+    const principaisItens = itens
+      .filter((item) => item.descricao.trim())
+      .slice(0, 3)
+      .map((item) => {
+        const quantidade = Number(item.quantidade) || 0;
+        return quantidade > 1
+          ? `${quantidade}x ${item.descricao.trim()}`
+          : item.descricao.trim();
+      });
+
+    const resumoItens =
+      principaisItens.length > 0
+        ? ` A proposta contempla ${principaisItens.join(", ")}.`
+        : "";
+
+    const trechoCartao =
+      pagamentoCartao.parcelas > 1
+        ? ` No cartão, o pagamento pode ser feito em ${pagamentoCartao.parcelas}x de ${moeda(
+            pagamentoCartao.valorParcela,
+          )}, exatamente conforme a condição registrada na proposta.`
+        : "";
+
+    return (
+      `Olá, ${primeiroNome.charAt(0).toUpperCase() + primeiroNome.slice(1).toLowerCase()}! Tudo bem?\n\n` +
+      `Preparei sua proposta de Segurança Eletrônica da CHOQUESEG.${resumoItens}\n\n` +
+      `O valor à vista ficou em ${moeda(totais.totalFinal)}.${trechoCartao}\n\n` +
+      `Todos os equipamentos, quantidades, valores e demais informações estão detalhados no PDF da proposta.\n\n` +
+      `Fico à disposição para qualquer dúvida.\n` +
+      `Equipe CHOQUESEG`
+    );
+  }
+
+  function abrirPreparacaoWhatsApp() {
+    const numeroCliente = telefone.replace(/\D/g, "");
+
+    if (numeroCliente.length < 10) {
+      alert("Informe um telefone válido do cliente.");
+      return;
+    }
+
+    setMensagemWhatsApp(montarMensagemProposta());
+    setMostrarMensagemWhatsApp(true);
+  }
+
+  function enviarMensagemWhatsApp() {
     const numeroCliente = telefone.replace(/\D/g, "");
     const destino =
-      numeroCliente.length >= 10 ? `55${numeroCliente}` : "";
+      numeroCliente.startsWith("55") && numeroCliente.length >= 12
+        ? numeroCliente
+        : numeroCliente.length >= 10
+          ? `55${numeroCliente}`
+          : "";
 
-    const mensagem = encodeURIComponent(
-      `Olá, ${nome || "cliente"}! Segue a proposta de segurança eletrônica preparada pela CHOQUESEG. O valor total é ${moeda(
-        totais.totalFinal,
-      )}.`,
-    );
+    if (!destino) {
+      alert("Informe um telefone válido do cliente.");
+      return;
+    }
+
+    if (!mensagemWhatsApp.trim()) {
+      alert("A mensagem não pode ficar vazia.");
+      return;
+    }
+
+    const mensagem = encodeURIComponent(mensagemWhatsApp);
 
     window.open(
       `https://wa.me/${destino}?text=${mensagem}`,
@@ -1163,10 +1234,10 @@ export default function FormularioSeguranca() {
 
             <button
               type="button"
-              onClick={abrirWhatsAppCliente}
+              onClick={abrirPreparacaoWhatsApp}
               className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white"
             >
-              💬 WhatsApp do cliente
+              💬 Preparar mensagem
             </button>
 
             <button
@@ -1176,15 +1247,6 @@ export default function FormularioSeguranca() {
             >
               ✅ Quero fechar com a CHOQUESEG
             </button>
-
-            <a
-              href={LINK_AVALIACAO_GOOGLE}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-xl border border-blue-500 px-4 py-3 text-sm font-black uppercase text-blue-400"
-            >
-              ⭐ Avaliar no Google
-            </a>
 
             <button
               type="button"
@@ -1330,6 +1392,59 @@ export default function FormularioSeguranca() {
               </div>
             </Secao>
 
+            <Secao titulo="Condições de Pagamento">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-zinc-200">
+                    Acréscimo no cartão %
+                  </span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={percentualCartao}
+                    onChange={(evento) =>
+                      setPercentualCartao(Number(evento.target.value) || 0)
+                    }
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-bold text-zinc-200">
+                    Parcelas no cartão
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="18"
+                    value={parcelasCartao}
+                    onChange={(evento) =>
+                      setParcelasCartao(
+                        Math.max(1, Math.round(Number(evento.target.value) || 1)),
+                      )
+                    }
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"
+                  />
+                </label>
+              </div>
+
+              <div className="rounded-xl border border-yellow-400/40 bg-zinc-950 p-4">
+                <p className="text-xs font-black uppercase text-zinc-400">
+                  Condição que aparecerá na proposta
+                </p>
+                <p className="mt-2 text-lg font-black text-yellow-400">
+                  À vista: {moeda(totais.totalFinal)}
+                </p>
+                {pagamentoCartao.parcelas > 1 && (
+                  <p className="mt-1 font-bold text-white">
+                    Cartão: {pagamentoCartao.parcelas}x de{" "}
+                    {moeda(pagamentoCartao.valorParcela)}
+                  </p>
+                )}
+              </div>
+            </Secao>
+
             <Secao titulo="Observações">
               <textarea
                 value={observacoes}
@@ -1457,6 +1572,60 @@ export default function FormularioSeguranca() {
           <PreviewSeguranca ref={previewCelularRef} dados={dadosPreview} />
         </div>
       </div>
+
+      {mostrarMensagemWhatsApp && (
+        <div className="fixed inset-0 z-[110] overflow-y-auto bg-black/80 p-3 backdrop-blur-sm md:p-6">
+          <div className="mx-auto mt-8 w-full max-w-3xl rounded-3xl border border-green-500/50 bg-zinc-950 p-5 shadow-2xl md:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-green-400">
+                  Mensagem da proposta
+                </p>
+                <h2 className="mt-1 text-2xl font-black uppercase text-white">
+                  Revise antes de abrir o WhatsApp
+                </h2>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setMostrarMensagemWhatsApp(false)}
+                className="rounded-xl border border-zinc-600 px-3 py-2 text-sm font-black uppercase text-zinc-300"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <textarea
+              value={mensagemWhatsApp}
+              onChange={(evento) => setMensagemWhatsApp(evento.target.value)}
+              rows={12}
+              className="mt-5 w-full resize-y rounded-2xl border border-zinc-700 bg-black px-4 py-4 text-sm leading-relaxed text-white outline-none focus:border-green-500"
+            />
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={enviarMensagemWhatsApp}
+                className="rounded-xl bg-green-600 px-5 py-4 font-black uppercase text-white"
+              >
+                💬 Abrir WhatsApp com esta mensagem
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMensagemWhatsApp(montarMensagemProposta())}
+                className="rounded-xl border border-yellow-400 px-5 py-4 font-black uppercase text-yellow-400"
+              >
+                Restaurar mensagem sugerida
+              </button>
+            </div>
+
+            <p className="mt-4 text-xs text-zinc-500">
+              A mensagem é apenas preparada pelo sistema. O envio continua sob sua confirmação no WhatsApp.
+            </p>
+          </div>
+        </div>
+      )}
 
       {configuradorAberto && kitAtual && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/80 p-3 backdrop-blur-sm md:p-6">
