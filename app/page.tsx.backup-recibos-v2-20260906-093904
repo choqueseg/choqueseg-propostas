@@ -15,7 +15,6 @@ import DashboardModule from "@/modules/dashboard/DashboardModule";
 import AgendaModule from "@/modules/agenda/AgendaModule";
 import FuncionariosModule from "@/modules/funcionarios/FuncionariosModule";
 import FinanceiroModule from "@/modules/financeiro/FinanceiroModule";
-import RecibosModule from "@/modules/recibos/RecibosModule";
 import EstoqueModule from "@/modules/estoque/EstoqueModule";
 import FormularioAutomacao from "@/components/FormularioAutomacao";
 
@@ -2069,4 +2068,3 @@ function ModuloEmConstrucao({
     </section>
   );
 }
-

@@ -260,6 +260,7 @@ export default function FormularioSeguranca() {
   const [gerandoPDFCelular, setGerandoPDFCelular] = useState(false);
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
   const [temaPDF, setTemaPDF] = useState<"claro" | "escuro">("escuro");
+  const [enderecoEmpresa, setEnderecoEmpresa] = useState("Rodovia dos Náufragos, Robalo, 710 - Aracaju/SE");
 
   const previewRef = useRef<HTMLDivElement>(null);
   const previewCelularRef = useRef<HTMLDivElement>(null);

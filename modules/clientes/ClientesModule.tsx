@@ -181,6 +181,7 @@ export default function ClientesModule() {
   const [mensagem, setMensagem] = useState("");
   const [secaoAtiva, setSecaoAtiva] = useState<"lista" | "cadastro">("lista");
   const [carregando, setCarregando] = useState(true);
+  const [clienteExpandido, setClienteExpandido] = useState<string | null>(null);
   useEffect(() => {
     void carregarClientes();
   }, []);
@@ -694,115 +695,139 @@ const clientesFiltrados = useMemo(() => {
         </p>
       </div>
     ) : (
-      clientesFiltrados.map((cliente) => (
-        <article
-          key={cliente.id}
-          className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
-        >
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h4 className="text-lg font-black uppercase text-white">
-                {cliente.nome}
-              </h4>
+      clientesFiltrados.map((cliente) => {
+        const expandido = clienteExpandido === cliente.id;
 
-              <p className="mt-1 text-yellow-400">
-                {cliente.telefone}
-              </p>
-
-              {cliente.cpfCnpj && (
-                <p className="mt-1 text-sm text-zinc-400">
-                  CPF/CNPJ: {cliente.cpfCnpj}
-                </p>
-              )}
-
-              <p className="mt-2 text-sm text-zinc-400">
-                {cliente.cidade || "Cidade não informada"}
-              </p>
-
-              <p className="mt-1 text-sm text-zinc-500">
-                {cliente.endereco ||
-                  "Endereço não informado"}
-              </p>
-            </div>
-
-            <span className="w-fit rounded-full bg-yellow-400/10 px-3 py-1 text-xs font-black uppercase text-yellow-400">
-              {cliente.tipoServico}
-            </span>
-          </div>
-
-          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-            <Informacao
-              titulo="Origem"
-              valor={cliente.origem}
-            />
-
-            <Informacao
-              titulo="Status"
-              valor={cliente.status}
-            />
-
-            <Informacao
-              titulo="Cadastro"
-              valor={formatarData(cliente.criadoEm)}
-            />
-
-            <Informacao
-              titulo="Próximo retorno"
-              valor={formatarData(cliente.retornoEm)}
-            />
-          </div>
-
-          {cliente.observacoes && (
-            <div className="mt-4 rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-400">
-              {cliente.observacoes}
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-col gap-3 xl:flex-row">
-            <select
-              value={cliente.status}
-              onChange={(evento) =>
-                atualizarStatus(
-                  cliente.id,
-                  evento.target.value as StatusCliente,
+        return (
+          <article
+            key={cliente.id}
+            className="rounded-2xl border border-zinc-800 bg-zinc-950 transition hover:border-zinc-700"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setClienteExpandido((atual) =>
+                  atual === cliente.id ? null : cliente.id,
                 )
               }
-              className="rounded-xl border border-zinc-700 bg-black px-3 py-2 text-sm font-bold text-white outline-none focus:border-yellow-400"
+              className="flex w-full items-center justify-between gap-3 p-4 text-left"
+              aria-expanded={expandido}
             >
-              <option>Novo Cliente</option>
-              <option>Orçamento Solicitado</option>
-              <option>Orçamento Enviado</option>
-              <option>Cliente Ainda Não Decidiu</option>
-              <option>Cliente Desistiu / Fechou com Outra Empresa</option>
-              <option>Serviço Fechado / Adiantamento Pago</option>
-              <option>Serviço Agendado</option>
-              <option>Em Execução</option>
-              <option>Serviço Concluído</option>
-              <option>Etapa de Obra</option>
-              <option>Projeto Aprovado</option>
-              <option>Solicitar Vistoria</option>
-              <option>Medidor Trocado</option>
-              <option>Pós-venda</option>
-            </select>
+              <div className="min-w-0">
+                <h4 className="truncate text-lg font-black uppercase text-white">
+                  {cliente.nome}
+                </h4>
 
-            <button
-              type="button"
-              onClick={() => editarCliente(cliente)}
-              className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400"
-            >
-              Editar
+                <p className="mt-1 truncate font-bold text-yellow-400">
+                  ☎ {cliente.telefone || "Telefone não informado"}
+                </p>
+
+                <p className="mt-1 truncate text-sm font-bold text-zinc-300">
+                  🛠 {cliente.tipoServico}
+                </p>
+              </div>
+
+              <span className="shrink-0 rounded-xl border border-zinc-700 bg-black px-3 py-2 text-sm font-black text-zinc-300">
+                {expandido ? "▲" : "▼"}
+              </span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => excluirCliente(cliente.id)}
-              className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400"
-            >
-              Excluir
-            </button>
-          </div>
-        </article>
-      ))
+            {expandido && (
+              <div className="border-t border-zinc-800 px-4 pb-4 pt-4">
+                <div className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+                  <Informacao
+                    titulo="Cidade"
+                    valor={cliente.cidade || "Não informada"}
+                  />
+
+                  <Informacao
+                    titulo="Endereço"
+                    valor={cliente.endereco || "Não informado"}
+                  />
+
+                  <Informacao
+                    titulo="CPF / CNPJ"
+                    valor={cliente.cpfCnpj || "Não informado"}
+                  />
+
+                  <Informacao
+                    titulo="Origem"
+                    valor={cliente.origem}
+                  />
+
+                  <Informacao
+                    titulo="Status"
+                    valor={cliente.status}
+                  />
+
+                  <Informacao
+                    titulo="Cadastro"
+                    valor={formatarData(cliente.criadoEm)}
+                  />
+
+                  <Informacao
+                    titulo="Próximo retorno"
+                    valor={formatarData(cliente.retornoEm)}
+                  />
+                </div>
+
+                {cliente.observacoes && (
+                  <div className="mt-4 rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-zinc-400">
+                    <p className="mb-1 text-xs font-black uppercase text-zinc-500">
+                      Observações
+                    </p>
+                    {cliente.observacoes}
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-col gap-3 xl:flex-row">
+                  <select
+                    value={cliente.status}
+                    onChange={(evento) =>
+                      atualizarStatus(
+                        cliente.id,
+                        evento.target.value as StatusCliente,
+                      )
+                    }
+                    className="rounded-xl border border-zinc-700 bg-black px-3 py-2 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                  >
+                    <option>Novo Cliente</option>
+                    <option>Orçamento Solicitado</option>
+                    <option>Orçamento Enviado</option>
+                    <option>Cliente Ainda Não Decidiu</option>
+                    <option>Cliente Desistiu / Fechou com Outra Empresa</option>
+                    <option>Serviço Fechado / Adiantamento Pago</option>
+                    <option>Serviço Agendado</option>
+                    <option>Em Execução</option>
+                    <option>Serviço Concluído</option>
+                    <option>Etapa de Obra</option>
+                    <option>Projeto Aprovado</option>
+                    <option>Solicitar Vistoria</option>
+                    <option>Medidor Trocado</option>
+                    <option>Pós-venda</option>
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => editarCliente(cliente)}
+                    className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400"
+                  >
+                    Editar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => excluirCliente(cliente.id)}
+                    className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            )}
+          </article>
+        );
+      })
     )}
   </div>
 </div>

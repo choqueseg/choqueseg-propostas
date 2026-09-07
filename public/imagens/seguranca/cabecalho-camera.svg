@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="420" viewBox="0 0 1600 420">
+<defs>
+  <linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#080808"/><stop offset="0.58" stop-color="#111111"/><stop offset="1" stop-color="#2b2b2b"/></linearGradient>
+  <radialGradient id="r"><stop offset="0" stop-color="#facc15" stop-opacity=".45"/><stop offset="1" stop-color="#facc15" stop-opacity="0"/></radialGradient>
+</defs>
+<rect width="1600" height="420" fill="url(#g)"/>
+<circle cx="1320" cy="160" r="250" fill="url(#r)"/>
+<g transform="translate(1160 70)">
+  <rect x="0" y="0" rx="34" width="300" height="280" fill="#151515" stroke="#facc15" stroke-width="6"/>
+  <text x="150" y="170" text-anchor="middle" font-family="Arial, sans-serif" font-size="120">📷</text>
+</g>
+<text x="90" y="170" font-family="Arial, sans-serif" font-weight="900" font-size="70" fill="#facc15">CFTV • CÂMERAS</text>
+<text x="90" y="235" font-family="Arial, sans-serif" font-weight="700" font-size="34" fill="#ffffff">Monitoramento e gravação para mais controle.</text>
+<path d="M90 280 H900" stroke="#facc15" stroke-width="8"/>
+</svg>

@@ -1,0 +1,180 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { createClient } from "@/utils/supabase/client";
+import FormularioProposta from "@/components/FormularioProposta";
+import SeletorTipoProposta from "@/components/SeletorTipoProposta";
+import HistoricoPropostas from "@/components/HistoricoPropostas";
+import AvaliacaoGoogleModule from "@/modules/avaliacoes/AvaliacaoGoogleModule";
+import FormularioSeguranca from "@/components/FormularioSeguranca";
+import FormularioEletrica from "@/components/FormularioEletrica";
+import CadastroProdutos from "@/components/CadastroProdutos";
+import ClientesModule from "@/modules/clientes/ClientesModule";
+import FunilModule from "@/modules/funil/FunilModule";
+import DashboardModule from "@/modules/dashboard/DashboardModule";
+import AgendaModule from "@/modules/agenda/AgendaModule";
+import FuncionariosModule from "@/modules/funcionarios/FuncionariosModule";
+import FinanceiroModule from "@/modules/financeiro/FinanceiroModule";
+import EstoqueModule from "@/modules/estoque/EstoqueModule";
+import FormularioAutomacao from "@/components/FormularioAutomacao";
+
+import ContratosModule from "@/modules/contratos/ContratosModule";
+import EngenhariaModule from "@/modules/engenharia/EngenhariaModule";
+import Projetos3DModule from "@/modules/projetos3d/Projetos3DModule";
+import SalaIAModule from "@/modules/sala-ia/SalaIAModule";
+import TreinamentosModule from "@/modules/treinamentos/TreinamentosModule";
+import VistoriasModule from "@/modules/vistorias/VistoriasModule";
+
+const supabase = createClient();
+
+type PerfilUsuario =
+  | "administrador"
+  | "vendedor"
+  | "tecnico"
+  | "atendente"
+  | "funcionario"; // compatibilidade com sessões antigas
+
+type UsuarioLogado = {
+  nome: string;
+  perfil: PerfilUsuario;
+};
+
+type ConviteUsuario = {
+  id: string;
+  token: string;
+  nome: string;
+  email: string;
+  funcao: string;
+  permissoes: string[];
+  status: "Pendente" | "Aceito" | "Cancelado" | "Expirado";
+  expira_em: string;
+};
+
+const PERMISSOES_SISTEMA = [
+  { id: "dashboard", nome: "Dashboard" },
+  { id: "clientes", nome: "Clientes" },
+  { id: "funil", nome: "Funil" },
+  { id: "agenda", nome: "Agenda" },
+  { id: "vistorias", nome: "Vistorias" },
+  { id: "treinamentos", nome: "Treinamentos" },
+  { id: "propostas", nome: "Propostas" },
+  { id: "contratos", nome: "Contratos" },
+  { id: "engenharia", nome: "Projetos / Engenharia" },
+  { id: "financeiro", nome: "Financeiro" },
+  { id: "estoque", nome: "Estoque" },
+  { id: "funcionarios", nome: "Funcionários" },
+] as const;
+
+function perfilPorFuncao(funcao: string): PerfilUsuario {
+  const valor = funcao.trim().toLowerCase();
+  if (valor.includes("atendente")) return "atendente";
+  if (valor.includes("vendedor") || valor.includes("gerente") || valor.includes("supervisor")) {
+    return "vendedor";
+  }
+  return "tecnico";
+}
+
+type TelaSistema =
+  | "dashboard"
+  | "propostas"
+  | "historico-propostas"
+  | "avaliacoes"
+  | "energia-solar"
+  | "seguranca-eletronica"
+  | "eletrica"
+  | "automacao"
+  | "cadastro-produtos"
+  | "clientes"
+  | "funil"
+  | "agenda"
+  | "financeiro"
+  | "funcionarios"
+  | "estoque"
+  | "vistorias"
+  | "engenharia"
+  | "treinamentos"
+  | "contratos"
+  | "sala-ia"
+  | "projetos3d"
+  | "convidar"
+  | "senhas";
+
+type TipoProposta =
+  | "energia-solar"
+  | "seguranca-eletronica"
+  | "eletrica"
+  | "automacao"
+  | "cadastro-produtos";
+
+type PropostaHistorico = {
+  id: string;
+  cliente_id?: string | null;
+  cliente_nome: string | null;
+  cliente_telefone: string | null;
+  cliente_cidade: string | null;
+  tipo_proposta: string | null;
+  valor_total: number | null;
+  status: string | null;
+  criada_em: string | null;
+  atualizada_em: string | null;
+};
+
+const CHAVE_SESSAO = "choqueseg-pro-sessao";
+const CHAVE_ORDEM_MENU = "choqueseg-pro-ordem-menu";
+
+const ORDEM_MENU_PADRAO: TelaSistema[] = [
+  "dashboard",
+  "clientes",
+  "funil",
+  "agenda",
+  "financeiro",
+  "propostas",
+  "historico-propostas",
+  "avaliacoes",
+  "funcionarios",
+  "convidar",
+  "senhas",
+  "estoque",
+  "vistorias",
+  "engenharia",
+  "treinamentos",
+  "contratos",
+  "sala-ia",
+  "projetos3d",
+];
+
+export default function Home() {
+  const [carregando, setCarregando] = useState(false);
+  const [usuarioLogado, setUsuarioLogado] =
+    useState<UsuarioLogado | null>(null);
+
+  const [usuario, setUsuario] = useState("");
+  const [senha, setSenha] = useState("");
+  const [erroLogin, setErroLogin] = useState("");
+
+  const [conviteAberto, setConviteAberto] = useState<ConviteUsuario | null>(null);
+  const [carregandoConvite, setCarregandoConvite] = useState(false);
+  const [usuarioConvite, setUsuarioConvite] = useState("");
+  const [senhaConvite, setSenhaConvite] = useState("");
+  const [confirmarSenhaConvite, setConfirmarSenhaConvite] = useState("");
+  const [erroConvite, setErroConvite] = useState("");
+  const [trocaSenhaObrigatoria, setTrocaSenhaObrigatoria] = useState<{
+    id: string;
+    nome: string;
+    perfil: PerfilUsuario;
+  } | null>(null);
+  const [novaSenhaObrigatoria, setNovaSenhaObrigatoria] = useState("");
+  const [confirmarNovaSenhaObrigatoria, setConfirmarNovaSenhaObrigatoria] = useState("");
+  const [erroTrocaObrigatoria, setErroTrocaObrigatoria] = useState("");
+  const [salvandoTrocaObrigatoria, setSalvandoTrocaObrigatoria] = useState(false);
+
+
+  const [telaAtual, setTelaAtual] =
+    useState<TelaSistema>("dashboard");
+
+  const [ordemMenu, setOrdemMenu] =
+    useState<TelaSistema[]>(ORDEM_MENU_PADRAO);
+
+  useEffect(() => {
+    try {
+      const ordemSalva = localStorage.getItem(CHAVE_ORDEM_MENU);

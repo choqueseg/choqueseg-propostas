@@ -648,6 +648,7 @@ function LinhaEtapas({
   const topoRef = useRef<HTMLDivElement | null>(null);
   const conteudoRef = useRef<HTMLDivElement | null>(null);
   const sincronizando = useRef(false);
+  const [clienteExpandido, setClienteExpandido] = useState<string | null>(null);
 
   function sincronizar(
     origem: "topo" | "conteudo",
@@ -737,97 +738,130 @@ function LinhaEtapas({
                       Arraste um cliente para esta etapa
                     </div>
                   ) : (
-                    clientesDaEtapa.map((cliente) => (
-                      <article
-                        key={cliente.id}
-                        draggable
-                        onDragStart={(evento) =>
-                          iniciarArraste(evento, cliente.id)
-                        }
-                        className={`cursor-grab rounded-xl border bg-zinc-950 p-2.5 shadow-lg transition active:cursor-grabbing ${
-                          clienteArrastado === cliente.id
-                            ? "border-yellow-400 opacity-60"
-                            : "border-zinc-800 hover:border-yellow-400/60"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <h4 className="truncate font-black uppercase text-white">
-                              {cliente.nome}
-                            </h4>
-                            <p className="mt-1 text-xs font-bold text-yellow-400">
-                              {cliente.telefone}
-                            </p>
-                          </div>
-                          <span className="text-lg">⋮⋮</span>
-                        </div>
+                    clientesDaEtapa.map((cliente) => {
+                      const expandido = clienteExpandido === cliente.id;
 
-                        <div className="mt-3 space-y-1 text-xs text-zinc-400">
-                          <p>📍 {cliente.cidade || "Cidade não informada"}</p>
-                          <p>🛠 {cliente.tipoServico}</p>
-                          <p>📣 {cliente.origem}</p>
-
-                          {etapa === "Cliente Ainda Não Decidiu" &&
-                            cliente.retornoEm && (
-                              <p className="font-bold text-orange-300">
-                                ⏰ Retorno do orçamento: {formatarData(cliente.retornoEm)}
-                              </p>
-                            )}
-                        </div>
-
-                        <select
-                          value={cliente.status}
-                          onChange={(evento) =>
-                            alterarStatus(
-                              cliente.id,
-                              evento.target.value as StatusCliente,
+                      return (
+                        <article
+                          key={cliente.id}
+                          draggable
+                          onDragStart={(evento) =>
+                            iniciarArraste(evento, cliente.id)
+                          }
+                          onClick={() =>
+                            setClienteExpandido((atual) =>
+                              atual === cliente.id ? null : cliente.id,
                             )
                           }
-                          onClick={(evento) => evento.stopPropagation()}
-                          className="mt-3 w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-yellow-400"
+                          className={`cursor-grab rounded-xl border bg-zinc-950 p-2.5 shadow-lg transition active:cursor-grabbing ${
+                            clienteArrastado === cliente.id
+                              ? "border-yellow-400 opacity-60"
+                              : expandido
+                                ? "border-yellow-400/70"
+                                : "border-zinc-800 hover:border-yellow-400/60"
+                          }`}
                         >
-                          {ETAPAS.map((opcao) => (
-                            <option key={opcao} value={opcao}>
-                              {opcao}
-                            </option>
-                          ))}
-                        </select>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h4 className="truncate font-black uppercase text-white">
+                                {cliente.nome}
+                              </h4>
 
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            className="rounded-lg border border-yellow-400/50 px-2 py-2 text-[11px] font-black uppercase text-yellow-400"
-                          >
-                            Proposta
-                          </button>
+                              <p className="mt-1 truncate text-xs font-bold text-yellow-400">
+                                📞 {cliente.telefone || "Telefone não informado"}
+                              </p>
 
-                          <button
-                            type="button"
-                            onClick={(evento) => {
-                              evento.stopPropagation();
-                              setClienteDetalhes(cliente);
-                            }}
-                            className="rounded-lg border border-zinc-700 px-2 py-2 text-[11px] font-black uppercase text-zinc-300"
-                          >
-                            Detalhes
-                          </button>
+                              <p className="mt-1 truncate text-xs font-bold text-zinc-300">
+                                🛠 {cliente.tipoServico || "Serviço não informado"}
+                              </p>
+                            </div>
 
-                          {etapa === "Cliente Ainda Não Decidiu" &&
-                            cliente.retornoEm && (
-                              <button
-                                type="button"
-                                onClick={(evento) => {
-                                  evento.stopPropagation();
-                                  prepararMensagemFollowUp(cliente);
-                                }}
-                                className="col-span-2 rounded-lg bg-green-600 px-2 py-2.5 text-[11px] font-black uppercase text-white"
+                            <button
+                              type="button"
+                              aria-label={expandido ? "Recolher cliente" : "Expandir cliente"}
+                              aria-expanded={expandido}
+                              onClick={(evento) => {
+                                evento.stopPropagation();
+                                setClienteExpandido((atual) =>
+                                  atual === cliente.id ? null : cliente.id,
+                                );
+                              }}
+                              className="shrink-0 rounded-lg border border-zinc-800 px-2 py-1 text-sm font-black text-zinc-400 hover:border-yellow-400/50 hover:text-yellow-300"
+                            >
+                              {expandido ? "▲" : "▼"}
+                            </button>
+                          </div>
+
+                          {expandido && (
+                            <div
+                              className="mt-3 border-t border-zinc-800 pt-3"
+                              onClick={(evento) => evento.stopPropagation()}
+                            >
+                              <div className="space-y-1 text-xs text-zinc-400">
+                                <p>📍 {cliente.cidade || "Cidade não informada"}</p>
+                                <p>📣 {cliente.origem || "Origem não informada"}</p>
+
+                                {etapa === "Cliente Ainda Não Decidiu" &&
+                                  cliente.retornoEm && (
+                                    <p className="font-bold text-orange-300">
+                                      ⏰ Retorno do orçamento: {formatarData(cliente.retornoEm)}
+                                    </p>
+                                  )}
+                              </div>
+
+                              <select
+                                value={cliente.status}
+                                onChange={(evento) =>
+                                  alterarStatus(
+                                    cliente.id,
+                                    evento.target.value as StatusCliente,
+                                  )
+                                }
+                                className="mt-3 w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-yellow-400"
                               >
-                                💬 Preparar mensagem
-                              </button>
-                            )}
-                        </div>
-                      </article>
-                    ))
+                                {ETAPAS.map((opcao) => (
+                                  <option key={opcao} value={opcao}>
+                                    {opcao}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <div className="mt-3 grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  className="rounded-lg border border-yellow-400/50 px-2 py-2 text-[11px] font-black uppercase text-yellow-400"
+                                >
+                                  Proposta
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setClienteDetalhes(cliente)}
+                                  className="rounded-lg border border-zinc-700 px-2 py-2 text-[11px] font-black uppercase text-zinc-300"
+                                >
+                                  Detalhes
+                                </button>
+
+                                {etapa === "Cliente Ainda Não Decidiu" &&
+                                  cliente.retornoEm && (
+                                    <button
+                                      type="button"
+                                      onClick={() => prepararMensagemFollowUp(cliente)}
+                                      className="col-span-2 rounded-lg bg-green-600 px-2 py-2.5 text-[11px] font-black uppercase text-white"
+                                    >
+                                      💬 Preparar mensagem
+                                    </button>
+                                  )}
+                              </div>
+
+                              <p className="mt-3 text-center text-[10px] font-bold uppercase text-zinc-600">
+                                Clique no cartão para recolher
+                              </p>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })
                   )}
                 </div>
               </div>

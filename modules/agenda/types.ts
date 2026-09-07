@@ -137,6 +137,7 @@ export type Servico = {
   tipoServico: string;
   data: string;
   horario: string;
+  horarioFim?: string;
   endereco: string;
   cidade: string;
   equipe: string;

@@ -1,0 +1,31 @@
+CHOQUESEG PRO — SEGURANÇA ELETRÔNICA — PADRÃO SOLAR ADAPTATIVO
+
+Este pacote substitui SOMENTE:
+1) components/FormularioSeguranca.tsx
+2) components/PreviewSeguranca.tsx
+3) public/imagens/seguranca/*
+
+Regras implementadas:
+- Matriz visual 794x1123 do Preview Solar aprovado.
+- 1 página para até 4 itens.
+- 2 páginas para 5 a 8 itens.
+- 3 páginas acima de 8 itens.
+- Tema Claro/Escuro herdado do formulário.
+- PDF Celular preservado.
+- Quantidades decimais preservadas (step 0.01).
+- Endereço da empresa editável no rodapé.
+- Rodapé com CHOQUESEG, telefone, Instagram e Intelbras.
+- CTA "Quero fechar" somente no fechamento/final.
+- Mensagem pré-pronta/WhatsApp preservados do formulário atual.
+- Imagens variam por câmera, cerca, alarme, motor e acesso.
+- Sem repetição desnecessária de escopo.
+
+INSTALAÇÃO SEGURA:
+Faça backup dos dois arquivos atuais antes de substituir.
+Depois execute:
+npm run dev
+Teste primeiro no navegador.
+Depois execute:
+npx tsc --noEmit
+
+OBS.: Se o projeto tiver erros TypeScript antigos em outros módulos, eles podem continuar aparecendo e não significam necessariamente erro nestes dois arquivos.

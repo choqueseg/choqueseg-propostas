@@ -8,8 +8,11 @@ import { createClient } from "@/utils/supabase/client";
 
 const supabase = createClient();
 
-const CHAVE_AGENDA = "choqueseg-pro-agenda";
 const CHAVE_TREINAMENTOS_AGENDA = "choqueseg-pro-agenda-treinamentos";
+
+function normalizarHorario(valor: string | null | undefined) {
+  return String(valor ?? "").slice(0, 5);
+}
 
 export default function AgendaModule({
   perfil,
@@ -24,19 +27,36 @@ export default function AgendaModule({
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [treinamentos, setTreinamentos] = useState<TreinamentoAgenda[]>([]);
-  const [dadosCarregados, setDadosCarregados] = useState(false);
+  const [compromissos, setCompromissos] = useState<CompromissoAgenda[]>([]);
 
   const [clienteId, setClienteId] = useState("");
   const [data, setData] = useState("");
   const [horario, setHorario] = useState("");
+  const [horarioFim, setHorarioFim] = useState("");
   const [equipesSelecionadas, setEquipesSelecionadas] = useState<string[]>([]);
   const [descricao, setDescricao] = useState("");
+  const [compromissoTipo, setCompromissoTipo] = useState<CompromissoAgenda["tipo"]>("Reunião");
+  const [compromissoTitulo, setCompromissoTitulo] = useState("");
+  const [compromissoData, setCompromissoData] = useState("");
+  const [compromissoHorario, setCompromissoHorario] = useState("");
+  const [compromissoHorarioFim, setCompromissoHorarioFim] = useState("");
+  const [compromissoResponsavel, setCompromissoResponsavel] = useState(usuarioNome);
+  const [compromissoLocal, setCompromissoLocal] = useState("");
+  const [compromissoDescricao, setCompromissoDescricao] = useState("");
   const [mensagem, setMensagem] = useState("");
-  const [secaoAtiva, setSecaoAtiva] = useState<"servicos" | "agendar">("servicos");
+  const [secaoAtiva, setSecaoAtiva] = useState<"servicos" | "agendar" | "compromisso">("servicos");
   const [visualizacao, setVisualizacao] = useState<"semana" | "mes" | "lista">("semana");
+  const [mostrarDisponibilidade, setMostrarDisponibilidade] = useState(false);
+  const [periodoDisponibilidade, setPeriodoDisponibilidade] = useState<"semana" | "mes">("semana");
+  const [diaDisponibilidadeSelecionado, setDiaDisponibilidadeSelecionado] = useState<string | null>(null);
+  const [filtroAgenda, setFiltroAgenda] = useState<
+    "todos" | "servicos" | "treinamentos" | "reunioes" | "pessoal" | "outros"
+  >("todos");
+  const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [dataReferencia, setDataReferencia] = useState(() => dataLocalISO(new Date()));
   const [servicoSelecionadoId, setServicoSelecionadoId] = useState<string | null>(null);
   const [treinamentoSelecionadoId, setTreinamentoSelecionadoId] = useState<string | null>(null);
+  const [compromissoSelecionadoId, setCompromissoSelecionadoId] = useState<string | null>(null);
   const [notificacaoServico, setNotificacaoServico] = useState<{
     titulo: string;
     mensagem: string;
@@ -45,6 +65,16 @@ export default function AgendaModule({
 
   const ehAdministrador = perfil === "administrador";
   const [cargoUsuario, setCargoUsuario] = useState("");
+
+  useEffect(() => {
+    // Remove o cache antigo da Agenda que podia ultrapassar o limite do navegador
+    // por conter fotos/assinaturas em base64. O Supabase continua sendo a fonte oficial.
+    try {
+      localStorage.removeItem("choqueseg-pro-agenda");
+    } catch {
+      // Falha ao limpar cache local não impede o funcionamento da Agenda.
+    }
+  }, []);
 
   const cargoNormalizado = cargoUsuario
     .normalize("NFD")
@@ -175,14 +205,21 @@ export default function AgendaModule({
     const tipoServico = String(registro.tipo_servico ?? "Serviço");
     const dataServico = String(registro.data ?? "");
     const horarioServico = String(registro.horario ?? "");
+    const horarioFimServico = String(registro.horario_fim ?? "");
 
     const dataFormatada = dataServico
       ? dataServico.split("-").reverse().join("/")
       : "";
 
-    const detalhesData = [dataFormatada, horarioServico && `às ${horarioServico}`]
+    const faixaHorario = horarioServico
+      ? horarioFimServico
+        ? `${horarioServico.slice(0, 5)} às ${horarioFimServico.slice(0, 5)}`
+        : horarioServico.slice(0, 5)
+      : "";
+
+    const detalhesData = [dataFormatada, faixaHorario]
       .filter(Boolean)
-      .join(" ");
+      .join(" • ");
 
     const fotos = Array.isArray(registro.fotos) ? registro.fotos.length : 0;
     const materiais = Array.isArray(registro.materiais)
@@ -315,6 +352,19 @@ export default function AgendaModule({
     };
   }, [usuarioNome]);
 
+  useEffect(() => {
+    const canalCompromissos = supabase
+      .channel(`agenda-compromissos-${usuarioNome}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "agenda_compromissos" },
+        () => { void carregarCompromissosAgenda(); },
+      )
+      .subscribe();
+
+    return () => { void supabase.removeChannel(canalCompromissos); };
+  }, [usuarioNome]);
+
   async function carregarTreinamentosAgenda() {
     const { data, error } = await supabase
       .from("treinamentos")
@@ -334,6 +384,7 @@ export default function AgendaModule({
       tema: String(item.tema ?? ""),
       data: String(item.data ?? ""),
       horario: String(item.horario ?? ""),
+      horarioFim: String(item.horario_fim ?? ""),
       responsavel: String(item.responsavel ?? ""),
       fornecedor: String(item.fornecedor ?? ""),
       local: String(item.local ?? ""),
@@ -353,6 +404,35 @@ export default function AgendaModule({
     return true;
   }
 
+  async function carregarCompromissosAgenda() {
+    const { data, error } = await supabase
+      .from("agenda_compromissos")
+      .select("id,tipo,titulo,data,horario,horario_fim,responsavel,local,descricao,criado_por,criado_em,atualizado_em")
+      .order("data", { ascending: true })
+      .order("horario", { ascending: true });
+
+    if (error) {
+      console.error("Erro ao carregar compromissos da Agenda:", error);
+      return false;
+    }
+
+    setCompromissos(
+      (data ?? []).map((item: any) => ({
+        id: String(item.id),
+        tipo: String(item.tipo ?? "Outro") as CompromissoAgenda["tipo"],
+        titulo: String(item.titulo ?? ""),
+        data: String(item.data ?? ""),
+        horario: String(item.horario ?? ""),
+        horarioFim: String(item.horario_fim ?? ""),
+        responsavel: String(item.responsavel ?? ""),
+        local: String(item.local ?? ""),
+        descricao: String(item.descricao ?? ""),
+        criadoPor: String(item.criado_por ?? ""),
+      })),
+    );
+    return true;
+  }
+
   async function carregarDados() {
     setMensagem("");
 
@@ -363,7 +443,7 @@ export default function AgendaModule({
       : "id,nome,cidade,endereco,tipo_servico";
 
     const camposServicosBase =
-      "id,cliente_id,cliente_nome,tipo_servico,data,horario,endereco,cidade,equipe,descricao,status,checklist,materiais,fotos,vistoria_solar,observacoes_tecnico,assinatura_cliente,saida_empresa_em,chegada_cliente_em,iniciado_em,iniciado_por,concluido_em,concluido_por,quilometragem_inicial,quilometragem_final,despesas,historico,criado_em,atualizado_em";
+      "id,cliente_id,cliente_nome,tipo_servico,data,horario,horario_fim,endereco,cidade,equipe,descricao,status,checklist,materiais,fotos,vistoria_solar,observacoes_tecnico,assinatura_cliente,saida_empresa_em,chegada_cliente_em,iniciado_em,iniciado_por,concluido_em,concluido_por,quilometragem_inicial,quilometragem_final,despesas,historico,criado_em,atualizado_em";
 
     const camposServicos = podeVerContato
       ? `${camposServicosBase},cliente_telefone`
@@ -440,6 +520,7 @@ export default function AgendaModule({
           tipoServico: item.tipo_servico ?? "",
           data: item.data ?? "",
           horario: item.horario ?? "",
+          horarioFim: item.horario_fim ?? "",
           endereco: item.endereco ?? "",
           cidade: item.cidade ?? "",
           equipe: item.equipe ?? "",
@@ -471,18 +552,11 @@ export default function AgendaModule({
       );
 
       setServicos(listaNuvem);
-      localStorage.setItem(CHAVE_AGENDA, JSON.stringify(listaNuvem));
     }
 
-    await carregarTreinamentosAgenda();
+    await Promise.all([carregarTreinamentosAgenda(), carregarCompromissosAgenda()]);
 
-    setDadosCarregados(true);
   }
-
-  useEffect(() => {
-    if (!dadosCarregados) return;
-    localStorage.setItem(CHAVE_AGENDA, JSON.stringify(servicos));
-  }, [servicos, dadosCarregados]);
 
   function servicoParaBanco(servico: Servico) {
     return {
@@ -493,6 +567,7 @@ export default function AgendaModule({
       tipo_servico: servico.tipoServico,
       data: servico.data,
       horario: servico.horario,
+      horario_fim: servico.horarioFim || null,
       endereco: servico.endereco,
       cidade: servico.cidade,
       equipe: servico.equipe,
@@ -552,6 +627,273 @@ export default function AgendaModule({
       );
   }, [treinamentos, agendaRestritaAoUsuario, usuarioNome]);
 
+  const compromissosVisiveis = useMemo(() => {
+    const nomeAtual = usuarioNome.trim().toLowerCase();
+    return compromissos
+      .filter((compromisso) => {
+        if (!agendaRestritaAoUsuario) return true;
+        return compromisso.responsavel.trim().toLowerCase() === nomeAtual;
+      })
+      .sort((a, b) => `${a.data}T${a.horario}`.localeCompare(`${b.data}T${b.horario}`));
+  }, [compromissos, agendaRestritaAoUsuario, usuarioNome]);
+
+  const servicosExibidos = useMemo(
+    () => (filtroAgenda === "todos" || filtroAgenda === "servicos" ? servicosVisiveis : []),
+    [filtroAgenda, servicosVisiveis],
+  );
+
+  const treinamentosExibidos = useMemo(
+    () => (filtroAgenda === "todos" || filtroAgenda === "treinamentos" ? treinamentosVisiveis : []),
+    [filtroAgenda, treinamentosVisiveis],
+  );
+
+  const compromissosExibidos = useMemo(() => {
+    if (filtroAgenda === "todos") return compromissosVisiveis;
+    if (filtroAgenda === "reunioes") {
+      return compromissosVisiveis.filter((item) => item.tipo === "Reunião");
+    }
+    if (filtroAgenda === "pessoal") {
+      return compromissosVisiveis.filter((item) => item.tipo === "Compromisso pessoal");
+    }
+    if (filtroAgenda === "outros") {
+      return compromissosVisiveis.filter((item) => item.tipo === "Outro");
+    }
+    return [];
+  }, [filtroAgenda, compromissosVisiveis]);
+
+  function eventosDetalhadosDoDia(dia: string) {
+    const eventos: {
+      id: string;
+      categoria: "Serviço" | "Treinamento" | "Reunião" | "Compromisso pessoal" | "Outro";
+      titulo: string;
+      inicio: string;
+      fim?: string;
+      responsavel?: string;
+      aoAbrir?: () => void;
+    }[] = [];
+
+    servicosVisiveis
+      .filter((servico) => servico.data === dia && servico.status !== "Concluído")
+      .forEach((servico) => {
+        eventos.push({
+          id: `servico-${servico.id}`,
+          categoria: "Serviço",
+          titulo: `${servico.clienteNome} — ${servico.tipoServico || "Serviço"}`,
+          inicio: normalizarHorario(servico.horario),
+          fim: normalizarHorario(servico.horarioFim),
+          responsavel: servico.equipe,
+          aoAbrir: () => setServicoSelecionadoId(servico.id),
+        });
+      });
+
+    treinamentosVisiveis
+      .filter((treinamento) => treinamento.data === dia && treinamento.status !== "Cancelado")
+      .forEach((treinamento) => {
+        eventos.push({
+          id: `treinamento-${treinamento.id}`,
+          categoria: "Treinamento",
+          titulo: treinamento.tema || "Treinamento",
+          inicio: normalizarHorario(treinamento.horario),
+          fim: normalizarHorario(treinamento.horarioFim),
+          responsavel: treinamento.responsavel,
+          aoAbrir: () => setTreinamentoSelecionadoId(treinamento.id),
+        });
+      });
+
+    compromissosVisiveis
+      .filter((compromisso) => compromisso.data === dia)
+      .forEach((compromisso) => {
+        eventos.push({
+          id: `compromisso-${compromisso.id}`,
+          categoria: compromisso.tipo,
+          titulo: compromisso.titulo,
+          inicio: normalizarHorario(compromisso.horario),
+          fim: normalizarHorario(compromisso.horarioFim),
+          responsavel: compromisso.responsavel,
+          aoAbrir: () => setCompromissoSelecionadoId(compromisso.id),
+        });
+      });
+
+    return eventos.sort((a, b) => a.inicio.localeCompare(b.inicio));
+  }
+
+  function eventosAtivosDoDia(dia: string) {
+    return eventosDetalhadosDoDia(dia).map((evento) => ({
+      inicio: evento.inicio,
+      fim: evento.fim,
+    }));
+  }
+
+  function selecionarDiaDisponibilidade(dia: string) {
+    setDiaDisponibilidadeSelecionado((atual) => (atual === dia ? null : dia));
+  }
+
+  function novoServicoNoDia(dia: string) {
+    setData(dia);
+    setHorario("");
+    setHorarioFim("");
+    setSecaoAtiva("agendar");
+    setMensagem(`Data ${dia.split("-").reverse().join("/")} selecionada. Informe cliente e horário inicial/final.`);
+  }
+
+  function novoCompromissoNoDia(dia: string) {
+    setCompromissoData(dia);
+    setCompromissoHorario("");
+    setCompromissoHorarioFim("");
+    setSecaoAtiva("compromisso");
+    setMensagem(`Data ${dia.split("-").reverse().join("/")} selecionada. Informe o compromisso e o horário inicial/final.`);
+  }
+
+  function periodoOcupado(
+    eventos: { inicio: string; fim?: string }[],
+    inicioPeriodo: string,
+    fimPeriodo: string,
+  ) {
+    return eventos.some((evento) => {
+      const inicio = normalizarHorario(evento.inicio);
+      const fim = normalizarHorario(evento.fim);
+      if (!inicio) return false;
+      if (!fim) return inicio >= inicioPeriodo && inicio < fimPeriodo;
+      return inicio < fimPeriodo && fim > inicioPeriodo;
+    });
+  }
+
+  function disponibilidadeDoDia(dia: string) {
+    const eventos = eventosAtivosDoDia(dia);
+    const manhaOcupada = periodoOcupado(eventos, "08:00", "12:00");
+    const tardeOcupada = periodoOcupado(eventos, "13:00", "18:00");
+
+    if (!manhaOcupada && !tardeOcupada) {
+      return { rotulo: "Livre", detalhe: "Manhã e tarde disponíveis", eventos: eventos.length };
+    }
+    if (!manhaOcupada && tardeOcupada) {
+      return { rotulo: "Livre pela manhã", detalhe: "Há compromisso à tarde", eventos: eventos.length };
+    }
+    if (manhaOcupada && !tardeOcupada) {
+      return { rotulo: "Livre à tarde", detalhe: "Há compromisso pela manhã", eventos: eventos.length };
+    }
+    return { rotulo: "Ocupado", detalhe: "Há compromissos pela manhã e à tarde", eventos: eventos.length };
+  }
+
+  function abrirDisponibilidade(periodo: "semana" | "mes") {
+    setPeriodoDisponibilidade(periodo);
+    setMostrarDisponibilidade(true);
+  }
+
+  function normalizarBusca(valor: string) {
+    return valor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function aplicarComandoVoz(transcricao: string) {
+    const texto = transcricao.trim();
+    const textoNormalizado = normalizarBusca(texto);
+
+    const clienteEncontrado = [...clientes]
+      .sort((a, b) => b.nome.length - a.nome.length)
+      .find((cliente) => textoNormalizado.includes(normalizarBusca(cliente.nome)));
+
+    const dataEncontrada = texto.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})\b/);
+    const horariosEncontrados = Array.from(
+      texto.matchAll(/\b([01]?\d|2[0-3])(?::|h)([0-5]\d)\b/gi),
+    );
+
+    const tecnicoEncontrado = [...funcionarios]
+      .filter((funcionario) => funcionario.status === "Ativo")
+      .sort((a, b) => b.nome.length - a.nome.length)
+      .find((funcionario) => textoNormalizado.includes(normalizarBusca(funcionario.nome)));
+
+    const descricaoEncontrada =
+      texto.match(/servi[cç]o(?:\s+de)?\s+(.+?)\s+agendad[oa]\s+para/i)?.[1]?.trim() ?? "";
+
+    if (clienteEncontrado) setClienteId(clienteEncontrado.id);
+
+    if (dataEncontrada) {
+      const [, diaVoz, mesVoz, anoVoz] = dataEncontrada;
+      setData(
+        `${anoVoz}-${String(Number(mesVoz)).padStart(2, "0")}-${String(Number(diaVoz)).padStart(2, "0")}`,
+      );
+    }
+
+    if (horariosEncontrados[0]) {
+      setHorario(
+        `${String(Number(horariosEncontrados[0][1])).padStart(2, "0")}:${horariosEncontrados[0][2]}`,
+      );
+    }
+    if (horariosEncontrados[1]) {
+      setHorarioFim(
+        `${String(Number(horariosEncontrados[1][1])).padStart(2, "0")}:${horariosEncontrados[1][2]}`,
+      );
+    }
+
+    if (tecnicoEncontrado) {
+      setEquipesSelecionadas((atuais) =>
+        atuais.includes(tecnicoEncontrado.nome)
+          ? atuais
+          : [...atuais, tecnicoEncontrado.nome],
+      );
+    }
+
+    if (descricaoEncontrada) setDescricao(descricaoEncontrada);
+
+    const faltando: string[] = [];
+    if (!clienteEncontrado) faltando.push("cliente");
+    if (!dataEncontrada) faltando.push("data");
+    if (horariosEncontrados.length < 2) faltando.push("horário inicial e final");
+    if (!tecnicoEncontrado) faltando.push("técnico");
+
+    setSecaoAtiva("agendar");
+    setMensagem(
+      faltando.length === 0
+        ? `Comando reconhecido: ${texto}. Confira os dados e clique em Agendar serviço.`
+        : `Comando reconhecido parcialmente. Confira os dados. Faltou identificar: ${faltando.join(", ")}.`,
+    );
+  }
+
+  function iniciarAgendamentoPorVoz() {
+    if (typeof window === "undefined") return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setMensagem(
+        "O navegador atual não oferece reconhecimento de voz. Use o preenchimento manual ou tente pelo Chrome/Edge.",
+      );
+      return;
+    }
+
+    const reconhecimento = new SpeechRecognition();
+    reconhecimento.lang = "pt-BR";
+    reconhecimento.interimResults = false;
+    reconhecimento.maxAlternatives = 1;
+
+    reconhecimento.onstart = () => {
+      setOuvindoVoz(true);
+      setMensagem("Ouvindo... diga cliente, data, horário inicial, horário final e, se possível, o técnico.");
+    };
+
+    reconhecimento.onend = () => setOuvindoVoz(false);
+    reconhecimento.onerror = () => {
+      setOuvindoVoz(false);
+      setMensagem("Não foi possível reconhecer o comando de voz. Tente novamente ou preencha manualmente.");
+    };
+
+    reconhecimento.onresult = (evento: any) => {
+      const transcricao = String(evento?.results?.[0]?.[0]?.transcript ?? "");
+      if (!transcricao) {
+        setMensagem("Não consegui entender o comando de voz.");
+        return;
+      }
+      aplicarComandoVoz(transcricao);
+    };
+
+    reconhecimento.start();
+  }
+
   const inicioSemana = useMemo(
     () => inicioDaSemana(dataReferencia),
     [dataReferencia],
@@ -581,6 +923,10 @@ export default function AgendaModule({
 
   const treinamentoSelecionado = treinamentoSelecionadoId
     ? treinamentos.find((treinamento) => treinamento.id === treinamentoSelecionadoId) ?? null
+    : null;
+
+  const compromissoSelecionado = compromissoSelecionadoId
+    ? compromissos.find((compromisso) => compromisso.id === compromissoSelecionadoId) ?? null
     : null;
 
   async function sincronizarClienteComFunil(
@@ -618,6 +964,96 @@ export default function AgendaModule({
     return null;
   }
 
+  function nomesEquipe(equipe: string | null | undefined) {
+    return String(equipe ?? "")
+      .split(",")
+      .map((nome) => nome.trim())
+      .filter(Boolean);
+  }
+
+  function mesmoTecnico(equipeServico: string, selecionados: string[]) {
+    const existentes = nomesEquipe(equipeServico).map((nome) =>
+      nome.toLocaleLowerCase("pt-BR"),
+    );
+
+    return selecionados.filter((nome) =>
+      existentes.includes(nome.trim().toLocaleLowerCase("pt-BR")),
+    );
+  }
+
+  function encontrarConflitosAgenda(
+    dataNova: string,
+    inicioNovo: string,
+    fimNovo: string,
+    ignorar?: { tipo: "servico" | "treinamento" | "compromisso"; id: string },
+  ) {
+    const inicio = normalizarHorario(inicioNovo);
+    const fim = normalizarHorario(fimNovo);
+    const sobrepoe = (inicioExistente: string, fimExistente?: string) => {
+      const ini = normalizarHorario(inicioExistente);
+      const fimEx = normalizarHorario(fimExistente);
+      if (!fimEx) return ini === inicio;
+      return inicio < fimEx && fim > ini;
+    };
+
+    const conflitos: ConflitoAgenda[] = [];
+
+    servicos.forEach((servico) => {
+      if (ignorar?.tipo === "servico" && ignorar.id === servico.id) return;
+      if (servico.data !== dataNova || servico.status === "Concluído") return;
+      if (!sobrepoe(servico.horario, servico.horarioFim)) return;
+      conflitos.push({
+        tipo: "Serviço",
+        titulo: `${servico.clienteNome} — ${servico.tipoServico || "Serviço"}`,
+        horario: servico.horario,
+        horarioFim: servico.horarioFim,
+        responsavel: servico.equipe,
+      });
+    });
+
+    treinamentos.forEach((treinamento) => {
+      if (ignorar?.tipo === "treinamento" && ignorar.id === treinamento.id) return;
+      if (treinamento.data !== dataNova || treinamento.status === "Cancelado") return;
+      if (!sobrepoe(treinamento.horario, treinamento.horarioFim)) return;
+      conflitos.push({
+        tipo: "Treinamento",
+        titulo: treinamento.tema,
+        horario: treinamento.horario,
+        horarioFim: treinamento.horarioFim,
+        responsavel: treinamento.responsavel || treinamento.participantes.join(", "),
+      });
+    });
+
+    compromissos.forEach((compromisso) => {
+      if (ignorar?.tipo === "compromisso" && ignorar.id === compromisso.id) return;
+      if (compromisso.data !== dataNova) return;
+      if (!sobrepoe(compromisso.horario, compromisso.horarioFim)) return;
+      conflitos.push({
+        tipo: compromisso.tipo,
+        titulo: compromisso.titulo,
+        horario: compromisso.horario,
+        horarioFim: compromisso.horarioFim,
+        responsavel: compromisso.responsavel,
+      });
+    });
+
+    return conflitos;
+  }
+
+  function confirmarConflitos(conflitos: ConflitoAgenda[], inicio: string, fim: string) {
+    if (conflitos.length === 0) return true;
+    const resumo = conflitos.slice(0, 5).map((conflito) => {
+      const faixa = conflito.horarioFim
+        ? `${normalizarHorario(conflito.horario)} às ${normalizarHorario(conflito.horarioFim)}`
+        : `${normalizarHorario(conflito.horario)} (sem horário final)`;
+      return `• ${conflito.tipo}: ${conflito.titulo} — ${faixa}${conflito.responsavel ? ` — ${conflito.responsavel}` : ""}`;
+    }).join("\n");
+    const extras = conflitos.length > 5 ? `\n• +${conflitos.length - 5} outro(s)` : "";
+    return window.confirm(
+      `ATENÇÃO: já existe compromisso nesse período.\n\n${resumo}${extras}\n\nNovo horário: ${normalizarHorario(inicio)} às ${normalizarHorario(fim)}.\n\nDeseja continuar mesmo assim?`,
+    );
+  }
+
   async function agendarServico(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     setMensagem("");
@@ -629,8 +1065,21 @@ export default function AgendaModule({
       return;
     }
 
-    if (!data || !horario || equipesSelecionadas.length === 0) {
-      setMensagem("Preencha data, horário e selecione pelo menos um técnico responsável.");
+    if (!data || !horario || !horarioFim || equipesSelecionadas.length === 0) {
+      setMensagem(
+        "Preencha data, horário inicial, horário final e selecione pelo menos um técnico responsável.",
+      );
+      return;
+    }
+
+    if (normalizarHorario(horarioFim) <= normalizarHorario(horario)) {
+      setMensagem("O horário final deve ser maior que o horário inicial.");
+      return;
+    }
+
+    const conflitos = encontrarConflitosAgenda(data, horario, horarioFim);
+    if (!confirmarConflitos(conflitos, horario, horarioFim)) {
+      setMensagem("Agendamento cancelado porque existe conflito de horário.");
       return;
     }
 
@@ -642,6 +1091,7 @@ export default function AgendaModule({
       tipoServico: cliente.tipoServico,
       data,
       horario,
+      horarioFim,
       endereco: cliente.endereco,
       cidade: cliente.cidade,
       equipe: equipesSelecionadas.join(", "),
@@ -676,10 +1126,80 @@ export default function AgendaModule({
     setClienteId("");
     setData("");
     setHorario("");
+    setHorarioFim("");
     setEquipesSelecionadas([]);
     setDescricao("");
     setMensagem("Serviço agendado e sincronizado com a nuvem.");
     setSecaoAtiva("servicos");
+  }
+
+  async function agendarCompromisso(evento: FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    setMensagem("");
+    if (!compromissoTitulo.trim() || !compromissoData || !compromissoHorario || !compromissoHorarioFim) {
+      setMensagem("Preencha título, data, horário inicial e horário final do compromisso.");
+      return;
+    }
+    if (normalizarHorario(compromissoHorarioFim) <= normalizarHorario(compromissoHorario)) {
+      setMensagem("O horário final deve ser maior que o horário inicial.");
+      return;
+    }
+    const conflitos = encontrarConflitosAgenda(compromissoData, compromissoHorario, compromissoHorarioFim);
+    if (!confirmarConflitos(conflitos, compromissoHorario, compromissoHorarioFim)) {
+      setMensagem("Compromisso não salvo porque existe conflito de horário.");
+      return;
+    }
+
+    const novo: CompromissoAgenda = {
+      id: crypto.randomUUID(), tipo: compromissoTipo, titulo: compromissoTitulo.trim(),
+      data: compromissoData, horario: compromissoHorario, horarioFim: compromissoHorarioFim,
+      responsavel: compromissoResponsavel.trim() || usuarioNome,
+      local: compromissoLocal.trim(), descricao: compromissoDescricao.trim(), criadoPor: usuarioNome,
+    };
+    const { error } = await supabase.from("agenda_compromissos").insert({
+      id: novo.id, tipo: novo.tipo, titulo: novo.titulo, data: novo.data,
+      horario: novo.horario, horario_fim: novo.horarioFim,
+      responsavel: novo.responsavel, local: novo.local, descricao: novo.descricao,
+      criado_por: usuarioNome, atualizado_em: new Date().toISOString(),
+    });
+    if (error) {
+      console.error("Erro ao criar compromisso:", error);
+      setMensagem(`Erro ao criar compromisso: ${error.message}`);
+      return;
+    }
+    setCompromissos((atuais) => [...atuais, novo]);
+    setCompromissoTitulo(""); setCompromissoData(""); setCompromissoHorario("");
+    setCompromissoHorarioFim(""); setCompromissoLocal(""); setCompromissoDescricao("");
+    setMensagem("Compromisso salvo na Agenda."); setSecaoAtiva("servicos");
+  }
+
+  async function salvarCompromisso(atualizado: CompromissoAgenda): Promise<boolean> {
+    if (!atualizado.titulo.trim() || !atualizado.data || !atualizado.horario || !atualizado.horarioFim) {
+      setMensagem("Preencha título, data, horário inicial e horário final."); return false;
+    }
+    if (normalizarHorario(atualizado.horarioFim) <= normalizarHorario(atualizado.horario)) {
+      setMensagem("O horário final deve ser maior que o horário inicial."); return false;
+    }
+    const conflitos = encontrarConflitosAgenda(atualizado.data, atualizado.horario, atualizado.horarioFim, { tipo: "compromisso", id: atualizado.id });
+    if (!confirmarConflitos(conflitos, atualizado.horario, atualizado.horarioFim)) return false;
+    const { error } = await supabase.from("agenda_compromissos").update({
+      tipo: atualizado.tipo, titulo: atualizado.titulo.trim(), data: atualizado.data,
+      horario: atualizado.horario, horario_fim: atualizado.horarioFim,
+      responsavel: atualizado.responsavel, local: atualizado.local,
+      descricao: atualizado.descricao, atualizado_em: new Date().toISOString(),
+    }).eq("id", atualizado.id);
+    if (error) { setMensagem(`Erro ao atualizar compromisso: ${error.message}`); return false; }
+    setCompromissos((atuais) => atuais.map((item) => item.id === atualizado.id ? atualizado : item));
+    setMensagem("Compromisso atualizado."); return true;
+  }
+
+  async function excluirCompromisso(id: string): Promise<boolean> {
+    if (!ehAdministrador) return false;
+    if (!window.confirm("Deseja realmente excluir este compromisso da Agenda?")) return false;
+    const { error } = await supabase.from("agenda_compromissos").delete().eq("id", id);
+    if (error) { setMensagem(`Erro ao excluir compromisso: ${error.message}`); return false; }
+    setCompromissos((atuais) => atuais.filter((item) => item.id !== id));
+    setCompromissoSelecionadoId(null); setMensagem("Compromisso excluído da Agenda."); return true;
   }
 
   function normalizarNomeEstoque(valor: string) {
@@ -885,13 +1405,13 @@ export default function AgendaModule({
     await salvarServico(atualizado);
   }
 
-  async function excluirServico(servicoId: string) {
-    if (!ehAdministrador) return;
+  async function excluirServico(servicoId: string): Promise<boolean> {
+    if (!ehAdministrador) return false;
 
     const confirmar = window.confirm(
-      "Deseja realmente excluir este serviço?",
+      "Deseja realmente excluir este serviço agendado?",
     );
-    if (!confirmar) return;
+    if (!confirmar) return false;
 
     const { error } = await supabase
       .from("servicos")
@@ -901,13 +1421,46 @@ export default function AgendaModule({
     if (error) {
       console.error("Erro ao excluir serviço:", error);
       setMensagem(`Erro ao excluir serviço da nuvem: ${error.message}`);
-      return;
+      return false;
     }
 
     setServicos((atuais) =>
       atuais.filter((servico) => servico.id !== servicoId),
     );
-    setMensagem("Serviço excluído da nuvem.");
+    setMensagem("Serviço excluído da Agenda e da nuvem.");
+    return true;
+  }
+
+
+  async function excluirTreinamento(treinamentoId: string): Promise<boolean> {
+    if (!ehAdministrador) return false;
+
+    const confirmar = window.confirm(
+      "Deseja realmente excluir este treinamento da Agenda?",
+    );
+    if (!confirmar) return false;
+
+    const { error } = await supabase
+      .from("treinamentos")
+      .delete()
+      .eq("id", treinamentoId);
+
+    if (error) {
+      console.error("Erro ao excluir treinamento:", error);
+      setMensagem(`Erro ao excluir treinamento da nuvem: ${error.message}`);
+      return false;
+    }
+
+    setTreinamentos((atuais) => {
+      const novaLista = atuais.filter((treinamento) => treinamento.id !== treinamentoId);
+      if (typeof window !== "undefined") {
+        localStorage.setItem(CHAVE_TREINAMENTOS_AGENDA, JSON.stringify(novaLista));
+      }
+      return novaLista;
+    });
+    setTreinamentoSelecionadoId(null);
+    setMensagem("Treinamento excluído da Agenda e da nuvem.");
+    return true;
   }
 
   function abrirMaps(endereco: string, cidade: string) {
@@ -1014,22 +1567,91 @@ export default function AgendaModule({
                   <span>Novo agendamento</span>
                 </button>
               )}
+
+              {ehAdministrador && (
+                <button
+                  type="button"
+                  onClick={() => setSecaoAtiva("compromisso")}
+                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                    secaoAtiva === "compromisso"
+                      ? "bg-yellow-400 text-black"
+                      : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
+                  }`}
+                >
+                  <span className="text-lg">🗓️</span>
+                  <span>Novo compromisso</span>
+                </button>
+              )}
             </nav>
           </div>
         </aside>
 
         <main className="min-w-0 flex-1">
+          {secaoAtiva === "agendar" && ehAdministrador && data && (
+            <div className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-xs font-black uppercase text-yellow-300">Horários já ocupados</p>
+                  <p className="mt-1 text-sm text-zinc-400">
+                    {data.split("-").reverse().join("/")} — confira antes de escolher o novo horário.
+                  </p>
+                </div>
+                <span className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-black text-zinc-300">
+                  {eventosDetalhadosDoDia(data).length} compromisso(s)
+                </span>
+              </div>
+
+              {eventosDetalhadosDoDia(data).length === 0 ? (
+                <p className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-bold text-emerald-300">
+                  Dia livre nos períodos já cadastrados.
+                </p>
+              ) : (
+                <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {eventosDetalhadosDoDia(data).map((evento) => (
+                    <div key={`ocupado-agendar-${evento.id}`} className="rounded-xl border border-zinc-800 bg-black px-3 py-2">
+                      <p className="text-xs font-black uppercase text-zinc-500">{evento.categoria}</p>
+                      <p className="mt-1 text-sm font-black text-white">
+                        {evento.inicio}{evento.fim ? ` às ${evento.fim}` : ""}
+                      </p>
+                      <p className="mt-1 truncate text-xs text-zinc-400">{evento.titulo}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {secaoAtiva === "agendar" && ehAdministrador && (
             <form
   onSubmit={agendarServico}
   className="mt-7 rounded-3xl border border-yellow-400/30 bg-black p-5"
 >
-  <h3 className="text-xl font-black uppercase text-yellow-400">
-    Novo agendamento
-  </h3>
-
-  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div>
+      <h3 className="text-xl font-black uppercase text-yellow-400">
+        Novo agendamento
+      </h3>
+      <p className="mt-1 text-sm text-zinc-500">
+        Preencha manualmente ou use o comando de voz para agilizar o cadastro.
+      </p>
+    </div>
+
+    <button
+      type="button"
+      onClick={iniciarAgendamentoPorVoz}
+      disabled={ouvindoVoz}
+      className="rounded-xl border border-yellow-400 px-4 py-3 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      {ouvindoVoz ? "🎙️ Ouvindo..." : "🎙️ Agendar por voz"}
+    </button>
+  </div>
+
+  <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs text-zinc-400">
+    Exemplo: “Cliente Pedro, serviço de cerca elétrica agendado para 09/08/2026, das 08:00 às 12:00, técnico João”.
+  </div>
+
+  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+    <div className="xl:col-span-3">
       <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">
         Cliente
       </label>
@@ -1047,10 +1669,27 @@ export default function AgendaModule({
       </select>
     </div>
 
-    <Campo label="Data" tipo="date" valor={data} onChange={setData} />
-    <Campo label="Horário" tipo="time" valor={horario} onChange={setHorario} />
+    <div className="xl:col-span-3">
+      <Campo label="Data" tipo="date" valor={data} onChange={setData} />
+    </div>
+    <div className="xl:col-span-3">
+      <Campo
+        label="Horário inicial"
+        tipo="time"
+        valor={horario}
+        onChange={setHorario}
+      />
+    </div>
+    <div className="xl:col-span-3">
+      <Campo
+        label="Horário final"
+        tipo="time"
+        valor={horarioFim}
+        onChange={setHorarioFim}
+      />
+    </div>
 
-    <div>
+    <div className="xl:col-span-12">
       <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">
         Técnicos responsáveis
       </label>
@@ -1097,12 +1736,14 @@ export default function AgendaModule({
       </div>
     </div>
 
-    <Campo
-      label="Descrição"
-      valor={descricao}
-      placeholder="Ex.: instalação de 4 câmeras"
-      onChange={setDescricao}
-    />
+    <div className="md:col-span-2 xl:col-span-12">
+      <Campo
+        label="Descrição"
+        valor={descricao}
+        placeholder="Ex.: instalação de 4 câmeras"
+        onChange={setDescricao}
+      />
+    </div>
   </div>
 
   <button
@@ -1112,6 +1753,24 @@ export default function AgendaModule({
     Agendar serviço
   </button>
 </form>
+          )}
+
+          {secaoAtiva === "compromisso" && ehAdministrador && (
+            <form onSubmit={agendarCompromisso} className="mt-7 rounded-3xl border border-yellow-400/30 bg-black p-5">
+              <h3 className="text-xl font-black uppercase text-yellow-400">Novo compromisso</h3>
+              <p className="mt-2 text-sm text-zinc-400">Reunião, compromisso pessoal ou outro bloqueio de agenda.</p>
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+                <div className="xl:col-span-2"><label className="mb-2 block text-xs font-bold uppercase text-zinc-400">Tipo</label><select value={compromissoTipo} onChange={(e) => setCompromissoTipo(e.target.value as CompromissoAgenda["tipo"])} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white"><option>Reunião</option><option>Compromisso pessoal</option><option>Outro</option></select></div>
+                <div className="xl:col-span-3"><Campo label="Título" valor={compromissoTitulo} placeholder="Ex.: Reunião com fornecedor" onChange={setCompromissoTitulo} /></div>
+                <div className="xl:col-span-3"><Campo label="Data" tipo="date" valor={compromissoData} onChange={setCompromissoData} /></div>
+                <div className="xl:col-span-2"><Campo label="Horário inicial" tipo="time" valor={compromissoHorario} onChange={setCompromissoHorario} /></div>
+                <div className="xl:col-span-2"><Campo label="Horário final" tipo="time" valor={compromissoHorarioFim} onChange={setCompromissoHorarioFim} /></div>
+                <div className="xl:col-span-3"><Campo label="Responsável" valor={compromissoResponsavel} onChange={setCompromissoResponsavel} /></div>
+                <div className="xl:col-span-3"><Campo label="Local" valor={compromissoLocal} placeholder="Opcional" onChange={setCompromissoLocal} /></div>
+                <div className="xl:col-span-6"><Campo label="Descrição" valor={compromissoDescricao} placeholder="Opcional" onChange={setCompromissoDescricao} /></div>
+              </div>
+              <button type="submit" className="mt-5 rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black">Salvar compromisso</button>
+            </form>
           )}
 
           {secaoAtiva === "servicos" && (
@@ -1137,6 +1796,48 @@ export default function AgendaModule({
                     >
                       Lista
                     </BotaoVisualizacao>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      value={filtroAgenda}
+                      onChange={(evento) =>
+                        setFiltroAgenda(
+                          evento.target.value as
+                            | "todos"
+                            | "servicos"
+                            | "treinamentos"
+                            | "reunioes"
+                            | "pessoal"
+                            | "outros",
+                        )
+                      }
+                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                      title="Filtrar eventos da Agenda"
+                    >
+                      <option value="todos">Todos os eventos</option>
+                      <option value="servicos">Serviços</option>
+                      <option value="treinamentos">Treinamentos</option>
+                      <option value="reunioes">Reuniões</option>
+                      <option value="pessoal">Compromissos pessoais</option>
+                      <option value="outros">Outros</option>
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => abrirDisponibilidade("semana")}
+                      className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm font-black uppercase text-emerald-300 transition hover:border-emerald-400"
+                    >
+                      Como está minha semana?
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => abrirDisponibilidade("mes")}
+                      className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm font-black uppercase text-emerald-300 transition hover:border-emerald-400"
+                    >
+                      Como está meu mês?
+                    </button>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -1173,7 +1874,171 @@ export default function AgendaModule({
                 </div>
               </div>
 
-              {servicosVisiveis.length === 0 && treinamentosVisiveis.length === 0 ? (
+              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                <span className="rounded-full border border-yellow-400/40 bg-yellow-400/10 px-3 py-1 text-yellow-300">
+                  Serviço
+                </span>
+                <span className="rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-blue-300">
+                  Treinamento
+                </span>
+                <span className="rounded-full border border-violet-500/40 bg-violet-500/10 px-3 py-1 text-violet-300">
+                  Reunião
+                </span>
+                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-emerald-300">
+                  Compromisso pessoal
+                </span>
+                <span className="rounded-full border border-zinc-600 bg-zinc-900 px-3 py-1 text-zinc-300">
+                  Outro
+                </span>
+              </div>
+
+              {mostrarDisponibilidade && (
+                <section className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-black uppercase text-emerald-300">Disponibilidade</p>
+                      <h3 className="mt-1 text-xl font-black uppercase text-white">
+                        {periodoDisponibilidade === "semana"
+                          ? `Semana ${tituloSemana(inicioSemana)}`
+                          : tituloMes(dataReferencia)}
+                      </h3>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Referência operacional: manhã 08:00–12:00 e tarde 13:00–18:00.
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setMostrarDisponibilidade(false)}
+                      className="rounded-xl border border-zinc-700 px-4 py-2 text-sm font-black uppercase text-zinc-300"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    {(periodoDisponibilidade === "semana"
+                      ? diasSemana
+                      : diasMes.filter((dia) => mesmoMes(dia, dataReferencia))
+                    ).map((dia) => {
+                      const disponibilidade = disponibilidadeDoDia(dia);
+                      const eventosDia = eventosDetalhadosDoDia(dia);
+                      const primeiroEvento = eventosDia[0];
+                      const diaAberto = diaDisponibilidadeSelecionado === dia;
+                      return (
+                        <div
+                          key={`disp-${dia}`}
+                          className={`rounded-xl border bg-black p-3 transition ${
+                            diaAberto ? "border-yellow-400" : "border-zinc-800 hover:border-yellow-400/50"
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => selecionarDiaDisponibilidade(dia)}
+                            className="w-full text-left"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="text-xs font-black uppercase text-zinc-500">
+                                  {nomeDiaSemana(dia)}
+                                </p>
+                                <p className="mt-1 font-black text-white">
+                                  {dia.split("-").reverse().join("/")}
+                                </p>
+                              </div>
+                              <span
+                                className={`rounded-full px-3 py-1 text-[11px] font-black uppercase ${
+                                  disponibilidade.rotulo === "Livre"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                    : disponibilidade.rotulo.includes("Livre")
+                                      ? "bg-yellow-400/10 text-yellow-300"
+                                      : "bg-red-500/10 text-red-300"
+                                }`}
+                              >
+                                {disponibilidade.rotulo}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-xs text-zinc-400">
+                              {disponibilidade.detalhe}
+                            </p>
+
+                            {primeiroEvento && (
+                              <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2">
+                                <p className="truncate text-xs font-black text-white">
+                                  {primeiroEvento.inicio}
+                                  {primeiroEvento.fim ? `–${primeiroEvento.fim}` : ""} • {primeiroEvento.titulo}
+                                </p>
+                                {eventosDia.length > 1 && (
+                                  <p className="mt-1 text-[11px] font-bold text-yellow-300">
+                                    +{eventosDia.length - 1} compromisso(s)
+                                  </p>
+                                )}
+                              </div>
+                            )}
+
+                            <p className="mt-2 text-xs font-bold text-zinc-500">
+                              {disponibilidade.eventos} compromisso(s) no dia • Clique para abrir
+                            </p>
+                          </button>
+
+                          {diaAberto && (
+                            <div className="mt-3 border-t border-zinc-800 pt-3">
+                              <p className="text-xs font-black uppercase text-yellow-300">
+                                Agenda do dia
+                              </p>
+
+                              {eventosDia.length === 0 ? (
+                                <p className="mt-2 text-xs text-zinc-400">Nenhum compromisso neste dia.</p>
+                              ) : (
+                                <div className="mt-2 space-y-2">
+                                  {eventosDia.map((evento) => (
+                                    <button
+                                      key={evento.id}
+                                      type="button"
+                                      onClick={evento.aoAbrir}
+                                      className="min-w-0 w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-left transition hover:border-yellow-400/50"
+                                    >
+                                      <p className="text-[11px] font-black uppercase text-zinc-500">
+                                        {evento.categoria}
+                                      </p>
+                                      <p className="mt-1 break-words text-sm font-black leading-tight text-white">{evento.titulo}</p>
+                                      <p className="mt-1 break-words text-xs leading-tight text-zinc-400">
+                                        {evento.inicio}{evento.fim ? ` às ${evento.fim}` : ""}
+                                        {evento.responsavel ? ` • ${evento.responsavel}` : ""}
+                                      </p>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+
+                              {ehAdministrador && (
+                                <div className="mt-3 grid min-w-0 gap-2 sm:grid-cols-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => novoServicoNoDia(dia)}
+                                    className="min-w-0 rounded-lg bg-yellow-400 px-2 py-2 text-[10px] font-black uppercase leading-tight text-black whitespace-normal break-words sm:text-xs"
+                                  >
+                                    + Serviço neste dia
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => novoCompromissoNoDia(dia)}
+                                    className="min-w-0 rounded-lg border border-yellow-400 px-2 py-2 text-[10px] font-black uppercase leading-tight text-yellow-300 whitespace-normal break-words sm:text-xs"
+                                  >
+                                    + Compromisso neste dia
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+
+              {servicosExibidos.length === 0 && treinamentosExibidos.length === 0 && compromissosExibidos.length === 0 ? (
                 <div className="rounded-3xl border border-dashed border-zinc-700 bg-black p-10 text-center">
                   <p className="text-5xl">📅</p>
                   <p className="mt-4 font-black uppercase">
@@ -1183,17 +2048,20 @@ export default function AgendaModule({
               ) : visualizacao === "lista" ? (
                 <div className="space-y-3">
                   {[
-                    ...servicosVisiveis.map((servico) => ({
+                    ...servicosExibidos.map((servico) => ({
                       tipo: "servico" as const,
                       data: servico.data,
                       horario: servico.horario,
                       servico,
                     })),
-                    ...treinamentosVisiveis.map((treinamento) => ({
+                    ...treinamentosExibidos.map((treinamento) => ({
                       tipo: "treinamento" as const,
                       data: treinamento.data,
                       horario: treinamento.horario,
                       treinamento,
+                    })),
+                    ...compromissosExibidos.map((compromisso) => ({
+                      tipo: "compromisso" as const, data: compromisso.data, horario: compromisso.horario, compromisso,
                     })),
                   ]
                     .sort((a, b) =>
@@ -1210,25 +2078,28 @@ export default function AgendaModule({
                           aoAlterarStatus={alterarStatus}
                           aoAbrirMaps={abrirMaps}
                         />
-                      ) : (
+                      ) : item.tipo === "treinamento" ? (
                         <CardTreinamentoAgenda
                           key={`t-${item.treinamento.id}`}
                           treinamento={item.treinamento}
                           onClick={() => setTreinamentoSelecionadoId(item.treinamento.id)}
                         />
+                      ) : (
+                        <CardCompromissoAgenda key={`c-${item.compromisso.id}`} compromisso={item.compromisso} onClick={() => setCompromissoSelecionadoId(item.compromisso.id)} />
                       ),
                     )}
                 </div>
               ) : visualizacao === "semana" ? (
-                <div className="w-full overflow-hidden rounded-2xl border border-zinc-800 bg-black">
-                  <div className="grid w-full grid-cols-7">
+                <div className="w-full overflow-x-auto rounded-2xl border border-zinc-800 bg-black">
+                  <div className="grid min-w-[1120px] grid-cols-7">
                     {diasSemana.map((dia) => {
-                      const servicosDia = servicosVisiveis.filter(
+                      const servicosDia = servicosExibidos.filter(
                         (servico) => servico.data === dia,
                       );
-                      const treinamentosDia = treinamentosVisiveis.filter(
+                      const treinamentosDia = treinamentosExibidos.filter(
                         (treinamento) => treinamento.data === dia,
                       );
+                      const compromissosDia = compromissosExibidos.filter((compromisso) => compromisso.data === dia);
                       const itensDia = [
                         ...servicosDia.map((servico) => ({
                           tipo: "servico" as const,
@@ -1240,13 +2111,14 @@ export default function AgendaModule({
                           horario: treinamento.horario,
                           treinamento,
                         })),
+                        ...compromissosDia.map((compromisso) => ({ tipo: "compromisso" as const, horario: compromisso.horario, compromisso })),
                       ].sort((a, b) => a.horario.localeCompare(b.horario));
                       const hoje = dia === dataLocalISO(new Date());
 
                       return (
                         <div
                           key={dia}
-                          className="min-w-0 border-r border-zinc-800 p-1 last:border-r-0 sm:p-2 lg:min-h-[420px]"
+                          className="min-w-[160px] border-r border-zinc-800 p-2 last:border-r-0 lg:min-h-[420px]"
                         >
                           <div
                             className={`mb-2 rounded-lg px-1 py-2 text-center sm:px-2 ${
@@ -1279,14 +2151,14 @@ export default function AgendaModule({
                                       setServicoSelecionadoId(item.servico.id)
                                     }
                                   />
-                                ) : (
+                                ) : item.tipo === "treinamento" ? (
                                   <EventoTreinamento
                                     key={`t-${item.treinamento.id}`}
                                     treinamento={item.treinamento}
-                                    onClick={() =>
-                                      setTreinamentoSelecionadoId(item.treinamento.id)
-                                    }
+                                    onClick={() => setTreinamentoSelecionadoId(item.treinamento.id)}
                                   />
+                                ) : (
+                                  <EventoCompromisso key={`c-${item.compromisso.id}`} compromisso={item.compromisso} onClick={() => setCompromissoSelecionadoId(item.compromisso.id)} />
                                 ),
                               )
                             )}
@@ -1297,8 +2169,8 @@ export default function AgendaModule({
                   </div>
                 </div>
               ) : (
-                <div className="w-full overflow-hidden rounded-2xl border border-zinc-800 bg-black">
-                  <div className="grid w-full grid-cols-7 border-b border-zinc-800 bg-zinc-950">
+                <div className="w-full overflow-x-auto rounded-2xl border border-zinc-800 bg-black">
+                  <div className="grid min-w-[980px] grid-cols-7 border-b border-zinc-800 bg-zinc-950">
                     {["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"].map(
                       (dia) => (
                         <div
@@ -1311,14 +2183,15 @@ export default function AgendaModule({
                     )}
                   </div>
 
-                  <div className="grid w-full grid-cols-7">
+                  <div className="grid min-w-[980px] grid-cols-7">
                     {diasMes.map((dia) => {
-                      const servicosDia = servicosVisiveis.filter(
+                      const servicosDia = servicosExibidos.filter(
                         (servico) => servico.data === dia,
                       );
-                      const treinamentosDia = treinamentosVisiveis.filter(
+                      const treinamentosDia = treinamentosExibidos.filter(
                         (treinamento) => treinamento.data === dia,
                       );
+                      const compromissosDia = compromissosExibidos.filter((compromisso) => compromisso.data === dia);
                       const itensDia = [
                         ...servicosDia.map((servico) => ({
                           tipo: "servico" as const,
@@ -1330,6 +2203,7 @@ export default function AgendaModule({
                           horario: treinamento.horario,
                           treinamento,
                         })),
+                        ...compromissosDia.map((compromisso) => ({ tipo: "compromisso" as const, horario: compromisso.horario, compromisso })),
                       ].sort((a, b) => a.horario.localeCompare(b.horario));
                       const doMesAtual = mesmoMes(dia, dataReferencia);
                       const hoje = dia === dataLocalISO(new Date());
@@ -1366,15 +2240,15 @@ export default function AgendaModule({
                                     setServicoSelecionadoId(item.servico.id)
                                   }
                                 />
-                              ) : (
+                              ) : item.tipo === "treinamento" ? (
                                 <EventoTreinamento
                                   key={`t-${item.treinamento.id}`}
                                   treinamento={item.treinamento}
                                   compacto
-                                  onClick={() =>
-                                    setTreinamentoSelecionadoId(item.treinamento.id)
-                                  }
+                                  onClick={() => setTreinamentoSelecionadoId(item.treinamento.id)}
                                 />
+                              ) : (
+                                <EventoCompromisso key={`c-${item.compromisso.id}`} compromisso={item.compromisso} compacto onClick={() => setCompromissoSelecionadoId(item.compromisso.id)} />
                               ),
                             )}
 
@@ -1403,6 +2277,7 @@ export default function AgendaModule({
     podeVerContatoCliente={podeVerContato}
     aoFechar={() => setServicoSelecionadoId(null)}
     aoSalvar={salvarServico}
+    aoExcluir={excluirServico}
     aoAbrirMaps={abrirMaps}
   />
 )}
@@ -1410,19 +2285,98 @@ export default function AgendaModule({
       {treinamentoSelecionado && (
         <ModalTreinamentoAgenda
           treinamento={treinamentoSelecionado}
+          ehAdministrador={ehAdministrador}
+          onDelete={excluirTreinamento}
           onClose={() => setTreinamentoSelecionadoId(null)}
         />
+      )}
+
+      {compromissoSelecionado && (
+        <ModalCompromissoAgenda compromisso={compromissoSelecionado} ehAdministrador={ehAdministrador} onSave={salvarCompromisso} onDelete={excluirCompromisso} onClose={() => setCompromissoSelecionadoId(null)} />
       )}
     </section>
   );
 }
 
 
+type ConflitoAgenda = { tipo: string; titulo: string; horario: string; horarioFim?: string; responsavel?: string };
+
+type CompromissoAgenda = {
+  id: string; tipo: "Reunião" | "Compromisso pessoal" | "Outro"; titulo: string;
+  data: string; horario: string; horarioFim: string; responsavel: string;
+  local: string; descricao: string; criadoPor?: string;
+};
+
+function estiloCompromisso(tipo: CompromissoAgenda["tipo"]) {
+  if (tipo === "Reunião") {
+    return {
+      card: "border-violet-500/30 bg-violet-500/10 hover:border-violet-400",
+      evento: "border-violet-500/40 bg-violet-500/10 hover:border-violet-300",
+      badge: "bg-violet-500/20 text-violet-300",
+      texto: "text-violet-300",
+    };
+  }
+  if (tipo === "Compromisso pessoal") {
+    return {
+      card: "border-emerald-500/30 bg-emerald-500/10 hover:border-emerald-400",
+      evento: "border-emerald-500/40 bg-emerald-500/10 hover:border-emerald-300",
+      badge: "bg-emerald-500/20 text-emerald-300",
+      texto: "text-emerald-300",
+    };
+  }
+  return {
+    card: "border-zinc-700 bg-zinc-900/70 hover:border-zinc-500",
+    evento: "border-zinc-700 bg-zinc-900/70 hover:border-zinc-500",
+    badge: "bg-zinc-800 text-zinc-300",
+    texto: "text-zinc-300",
+  };
+}
+
+function CardCompromissoAgenda({ compromisso, onClick }: { compromisso: CompromissoAgenda; onClick: () => void }) {
+  const estilo = estiloCompromisso(compromisso.tipo);
+  return <button type="button" onClick={onClick} className={`w-full rounded-2xl border p-4 text-left transition ${estilo.card}`}>
+    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${estilo.badge}`}>{compromisso.tipo}</span><span className={`text-sm font-black ${estilo.texto}`}>{compromisso.data.split("-").reverse().join("/")} • {normalizarHorario(compromisso.horario)} às {normalizarHorario(compromisso.horarioFim)}</span></div>
+    <h4 className="mt-2 font-black uppercase text-white">{compromisso.titulo}</h4>{compromisso.responsavel && <p className="mt-1 text-sm text-zinc-400">Responsável: {compromisso.responsavel}</p>}{compromisso.local && <p className="mt-1 text-sm text-zinc-500">Local: {compromisso.local}</p>}
+  </button>;
+}
+
+function EventoCompromisso({ compromisso, compacto = false, onClick }: { compromisso: CompromissoAgenda; compacto?: boolean; onClick: () => void }) {
+  const estilo = estiloCompromisso(compromisso.tipo);
+  return <button type="button" onClick={onClick} className={`min-w-0 w-full overflow-hidden rounded-md border p-1 text-left transition sm:rounded-lg sm:p-1.5 md:p-2 ${estilo.evento}`} title={`${normalizarHorario(compromisso.horario)} às ${normalizarHorario(compromisso.horarioFim)} • ${compromisso.tipo} • ${compromisso.titulo}`}>
+    <p className={`truncate text-[9px] font-black sm:text-[10px] md:text-xs ${estilo.texto}`}>{normalizarHorario(compromisso.horario)} às {normalizarHorario(compromisso.horarioFim)}</p>
+    <p className={`mt-0.5 truncate text-[7px] font-black uppercase sm:text-[8px] md:text-[10px] ${estilo.texto}`}>{compromisso.tipo}</p>
+    <p className="mt-0.5 truncate text-[8px] font-black uppercase text-white sm:text-[9px] md:text-xs">{compromisso.titulo}</p>
+    {!compacto && compromisso.responsavel && <p className="mt-0.5 hidden truncate text-[8px] font-bold text-zinc-500 md:block md:text-[10px]">{compromisso.responsavel}</p>}
+  </button>;
+}
+
+function ModalCompromissoAgenda({ compromisso, ehAdministrador, onSave, onDelete, onClose }: { compromisso: CompromissoAgenda; ehAdministrador: boolean; onSave: (c: CompromissoAgenda) => Promise<boolean>; onDelete: (id: string) => Promise<boolean>; onClose: () => void }) {
+  const [rascunho, setRascunho] = useState<CompromissoAgenda>({ ...compromisso });
+  const [mensagemLocal, setMensagemLocal] = useState("");
+  return <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4"><div className="w-full max-w-3xl rounded-3xl border border-violet-500/40 bg-zinc-950 p-5 shadow-2xl">
+    <div className="flex items-start justify-between gap-4"><div><span className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-black uppercase text-violet-300">{rascunho.tipo}</span><h3 className="mt-3 text-2xl font-black uppercase text-white">{rascunho.titulo}</h3></div><button type="button" onClick={onClose} className="rounded-xl border border-zinc-700 px-3 py-2 text-sm font-black text-zinc-300">Fechar</button></div>
+    {mensagemLocal && <div className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">{mensagemLocal}</div>}
+    <div className="mt-5 grid gap-4 sm:grid-cols-2">
+      <div><label className="mb-2 block text-xs font-black uppercase text-zinc-500">Tipo</label><select disabled={!ehAdministrador} value={rascunho.tipo} onChange={(e)=>setRascunho({...rascunho,tipo:e.target.value as CompromissoAgenda["tipo"]})} className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white"><option>Reunião</option><option>Compromisso pessoal</option><option>Outro</option></select></div>
+      <EditCampo label="Título" value={rascunho.titulo} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,titulo:v})}/>
+      <EditCampo label="Data" type="date" value={rascunho.data} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,data:v})}/>
+      <div className="grid grid-cols-2 gap-3"><EditCampo label="Início" type="time" value={normalizarHorario(rascunho.horario)} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,horario:v})}/><EditCampo label="Fim" type="time" value={normalizarHorario(rascunho.horarioFim)} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,horarioFim:v})}/></div>
+      <EditCampo label="Responsável" value={rascunho.responsavel} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,responsavel:v})}/>
+      <EditCampo label="Local" value={rascunho.local} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,local:v})}/>
+      <div className="sm:col-span-2"><EditCampo label="Descrição" value={rascunho.descricao} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,descricao:v})}/></div>
+    </div>
+    {ehAdministrador && <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={async()=>{const ok=await onSave(rascunho); if(ok){setMensagemLocal("Alterações salvas."); onClose();}}} className="rounded-xl bg-yellow-400 px-5 py-3 font-black uppercase text-black">Salvar / Reagendar</button><button type="button" onClick={async()=>{const ok=await onDelete(rascunho.id); if(ok) onClose();}} className="rounded-xl border border-red-500/60 px-5 py-3 font-black uppercase text-red-400">Excluir compromisso</button></div>}
+  </div></div>;
+}
+
+function EditCampo({ label, value, onChange, type="text", disabled=false }: { label:string; value:string; onChange:(v:string)=>void; type?:string; disabled?:boolean }) { return <div><label className="mb-2 block text-xs font-black uppercase text-zinc-500">{label}</label><input type={type} value={value} disabled={disabled} onChange={(e)=>onChange(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white disabled:opacity-70"/></div>; }
+
 type TreinamentoAgenda = {
   id: string;
   tema: string;
   data: string;
   horario: string;
+  horarioFim?: string;
   responsavel: string;
   fornecedor: string;
   local: string;
@@ -1449,7 +2403,7 @@ function CardTreinamentoAgenda({
           Treinamento
         </span>
         <span className="text-sm font-black text-blue-300">
-          {treinamento.data.split("-").reverse().join("/")} • {treinamento.horario}
+          {treinamento.data.split("-").reverse().join("/")} • {normalizarHorario(treinamento.horario)}{treinamento.horarioFim ? ` às ${normalizarHorario(treinamento.horarioFim)}` : ""}
         </span>
       </div>
       <h4 className="mt-2 font-black uppercase text-white">{treinamento.tema}</h4>
@@ -1476,10 +2430,10 @@ function EventoTreinamento({
       type="button"
       onClick={onClick}
       className="min-w-0 w-full overflow-hidden rounded-md border border-blue-500/40 bg-blue-500/10 p-1 text-left transition hover:border-blue-300 sm:rounded-lg sm:p-1.5 md:p-2"
-      title={`${treinamento.horario} • Treinamento • ${treinamento.tema}`}
+      title={`${normalizarHorario(treinamento.horario)}${treinamento.horarioFim ? ` às ${normalizarHorario(treinamento.horarioFim)}` : ""} • Treinamento • ${treinamento.tema}`}
     >
       <p className="truncate text-[9px] font-black text-blue-300 sm:text-[10px] md:text-xs">
-        {treinamento.horario || "--:--"}
+        {normalizarHorario(treinamento.horario) || "--:--"}{treinamento.horarioFim ? ` às ${normalizarHorario(treinamento.horarioFim)}` : ""}
       </p>
       <p className="mt-0.5 truncate text-[7px] font-black uppercase text-blue-300 sm:text-[8px] md:text-[10px]">
         TREINAMENTO
@@ -1498,9 +2452,13 @@ function EventoTreinamento({
 
 function ModalTreinamentoAgenda({
   treinamento,
+  ehAdministrador,
+  onDelete,
   onClose,
 }: {
   treinamento: TreinamentoAgenda;
+  ehAdministrador: boolean;
+  onDelete: (treinamentoId: string) => Promise<boolean>;
   onClose: () => void;
 }) {
   return (
@@ -1527,7 +2485,7 @@ function ModalTreinamentoAgenda({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <DetalheTreinamento label="Data" valor={treinamento.data ? treinamento.data.split("-").reverse().join("/") : "—"} />
-          <DetalheTreinamento label="Horário" valor={treinamento.horario || "—"} />
+          <DetalheTreinamento label="Horário" valor={`${normalizarHorario(treinamento.horario) || "—"}${treinamento.horarioFim ? ` às ${normalizarHorario(treinamento.horarioFim)}` : ""}`} />
           <DetalheTreinamento label="Local / link" valor={treinamento.local || "—"} />
           <DetalheTreinamento label="Responsável / instrutor" valor={treinamento.responsavel || "—"} />
           <DetalheTreinamento label="Fornecedor / parceiro" valor={treinamento.fornecedor || "—"} />
@@ -1548,6 +2506,19 @@ function ModalTreinamentoAgenda({
               {treinamento.observacoes}
             </p>
           </div>
+        )}
+
+        {ehAdministrador && (
+          <button
+            type="button"
+            onClick={async () => {
+              const excluido = await onDelete(treinamento.id);
+              if (excluido) onClose();
+            }}
+            className="mt-5 w-full rounded-xl border border-red-500/60 px-4 py-3 text-sm font-black uppercase text-red-400 transition hover:bg-red-500/10"
+          >
+            Excluir treinamento
+          </button>
         )}
       </div>
     </div>
@@ -1607,15 +2578,16 @@ function EventoAgenda({
       type="button"
       onClick={onClick}
       className="min-w-0 w-full overflow-hidden rounded-md border border-yellow-400/30 bg-yellow-400/10 p-1 text-left transition hover:border-yellow-400 sm:rounded-lg sm:p-1.5 md:p-2"
-      title={`${servico.horario} • ${servico.clienteNome} • ${servico.tipoServico}`}
+      title={`${normalizarHorario(servico.horario)}${servico.horarioFim ? ` às ${normalizarHorario(servico.horarioFim)}` : ""} • ${servico.clienteNome} • ${servico.tipoServico}`}
     >
-      <p className="truncate text-[9px] font-black text-yellow-400 sm:text-[10px] md:text-xs">
-        {servico.horario || "--:--"}
+      <p className="whitespace-nowrap text-[10px] font-black text-yellow-400 sm:text-xs">
+        {normalizarHorario(servico.horario) || "--:--"}
+        {servico.horarioFim ? ` às ${normalizarHorario(servico.horarioFim)}` : ""}
       </p>
-      <p className="mt-0.5 truncate text-[8px] font-black uppercase text-white sm:text-[9px] md:mt-1 md:text-xs">
+      <p className="mt-1 whitespace-normal break-words text-[10px] font-black uppercase leading-tight text-white sm:text-xs">
         {servico.clienteNome}
       </p>
-      <p className="mt-0.5 truncate text-[7px] font-bold leading-tight text-zinc-400 sm:text-[8px] md:mt-1 md:text-[10px]">
+      <p className="mt-1 whitespace-normal break-words text-[9px] font-bold leading-tight text-zinc-400 sm:text-[10px]">
         {servico.tipoServico || "Serviço"}
       </p>
       {!compacto && (

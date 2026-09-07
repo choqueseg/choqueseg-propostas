@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Servico } from "./types";
 
 type CardServicoProps = {
@@ -28,80 +29,174 @@ export default function CardServico({
   aoAlterarStatus,
   aoAbrirMaps,
 }: CardServicoProps) {
+  const [expandido, setExpandido] = useState(false);
+
   const checklistTotal = servico.checklist?.length ?? 0;
   const checklistConcluido =
     servico.checklist?.filter((item) => item.concluido).length ?? 0;
 
+  const faixaHorario = servico.horarioFim
+    ? `${servico.horario} às ${servico.horarioFim}`
+    : servico.horario;
+
   return (
-    <article className="rounded-2xl border border-zinc-800 bg-black p-5">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-xl font-black uppercase">
+    <article className="rounded-2xl border border-zinc-800 bg-black transition hover:border-zinc-700">
+      <button
+        type="button"
+        onClick={() => setExpandido((atual) => !atual)}
+        className="flex w-full items-center justify-between gap-3 p-4 text-left"
+        aria-expanded={expandido}
+      >
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="shrink-0 text-sm font-black text-yellow-400">
+              {faixaHorario || "Horário não informado"}
+            </p>
+
+            <span className="text-zinc-600">•</span>
+
+            <h3 className="truncate text-lg font-black uppercase text-white">
               {servico.clienteNome}
             </h3>
+          </div>
+
+          <p className="mt-1 truncate text-sm font-bold text-zinc-300">
+            🛠 {servico.tipoServico || "Serviço não informado"}
+          </p>
+        </div>
+
+        <span className="shrink-0 rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-black text-zinc-300">
+          {expandido ? "▲" : "▼"}
+        </span>
+      </button>
+
+      {expandido && (
+        <div className="border-t border-zinc-800 px-4 pb-4 pt-4">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-yellow-400/40 bg-yellow-400/10 px-3 py-1 text-xs font-black uppercase text-yellow-300">
               {servico.status}
             </span>
+
+            <span className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-bold text-zinc-400">
+              📅 {formatarData(servico.data)}
+            </span>
           </div>
 
-          <div className="mt-3 space-y-1 text-sm text-zinc-400">
-            <p>📅 {formatarData(servico.data)} às {servico.horario}</p>
-            <p>🛠 {servico.tipoServico || "Serviço não informado"}</p>
-            <p>👷 {servico.equipe}</p>
-            <p>📍 {servico.endereco}, {servico.cidade}</p>
-            {servico.descricao && <p>📝 {servico.descricao}</p>}
-            {checklistTotal > 0 && (
-              <p>✅ Checklist: {checklistConcluido}/{checklistTotal}</p>
+          <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            <Informacao
+              titulo="Horário"
+              valor={faixaHorario || "Não informado"}
+            />
+
+            <Informacao
+              titulo="Equipe"
+              valor={servico.equipe || "Não informada"}
+            />
+
+            <Informacao
+              titulo="Endereço"
+              valor={
+                [servico.endereco, servico.cidade]
+                  .filter(Boolean)
+                  .join(", ") || "Não informado"
+              }
+            />
+
+            <Informacao
+              titulo="Checklist"
+              valor={
+                checklistTotal > 0
+                  ? `${checklistConcluido}/${checklistTotal}`
+                  : "Sem checklist"
+              }
+            />
+          </div>
+
+          {servico.descricao && (
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-zinc-400">
+              <p className="mb-1 text-xs font-black uppercase text-zinc-500">
+                Descrição
+              </p>
+              {servico.descricao}
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <button
+              type="button"
+              onClick={(evento) => {
+                evento.stopPropagation();
+                aoAbrir(servico);
+              }}
+              className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+            >
+              Abrir serviço
+            </button>
+
+            <button
+              type="button"
+              onClick={(evento) => {
+                evento.stopPropagation();
+                aoAbrirMaps(servico.endereco, servico.cidade);
+              }}
+              className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black uppercase text-black"
+            >
+              Abrir no Maps
+            </button>
+
+            {ehAdministrador && (
+              <select
+                value={servico.status}
+                onClick={(evento) => evento.stopPropagation()}
+                onChange={(evento) =>
+                  aoAlterarStatus(
+                    servico.id,
+                    evento.target.value as Servico["status"],
+                  )
+                }
+                className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-bold text-white"
+              >
+                <option>Agendado</option>
+                <option>Em execução</option>
+                <option>Concluído</option>
+              </select>
+            )}
+
+            {ehAdministrador && (
+              <button
+                type="button"
+                onClick={(evento) => {
+                  evento.stopPropagation();
+                  aoExcluir(servico.id);
+                }}
+                className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400"
+              >
+                Excluir
+              </button>
             )}
           </div>
         </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => aoAbrir(servico)}
-            className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
-          >
-            Abrir serviço
-          </button>
-
-          <button
-            type="button"
-            onClick={() => aoAbrirMaps(servico.endereco, servico.cidade)}
-            className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black uppercase text-black"
-          >
-            Abrir no Maps
-          </button>
-
-          {ehAdministrador && (
-            <select
-              value={servico.status}
-              onChange={(evento) =>
-                aoAlterarStatus(
-                  servico.id,
-                  evento.target.value as Servico["status"],
-                )
-              }
-              className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-bold text-white"
-            >
-              <option>Agendado</option>
-              <option>Em execução</option>
-              <option>Concluído</option>
-            </select>
-          )}
-
-          {ehAdministrador && (
-            <button
-              type="button"
-              onClick={() => aoExcluir(servico.id)}
-              className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400"
-            >
-              Excluir
-            </button>
-          )}
-        </div>
-      </div>
+      )}
     </article>
+  );
+}
+
+function Informacao({
+  titulo,
+  valor,
+}: {
+  titulo: string;
+  valor: string;
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+      <p className="text-xs font-black uppercase text-zinc-500">
+        {titulo}
+      </p>
+
+      <p className="mt-1 break-words font-bold text-zinc-200">
+        {valor}
+      </p>
+    </div>
   );
 }

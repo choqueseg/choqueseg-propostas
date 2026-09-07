@@ -1,12 +1,9 @@
 "use client";
 
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
-import { createClient } from "@/utils/supabase/client";
 import PreviewProposta, { DadosPreview, type InstalacaoPortfolio } from "./PreviewProposta";
-
-const supabase = createClient();
 import {
   type Equipamento,
   inversoresPadrao,
@@ -26,17 +23,6 @@ type KitSolar = {
   valor: string;
 };
 
-type Cliente = {
-  id: string | number;
-  nome: string;
-  telefone?: string | null;
-  cidade?: string | null;
-  endereco?: string | null;
-  cpf_cnpj?: string | null;
-  cpf?: string | null;
-  cnpj?: string | null;
-};
-
 const kits: KitSolar[] = [
   { id: "300", nome: "Kit 300 kWh", geracao: "300", potencia: "2,50 kWp", quantidadeModulos: "4", moduloId: "jinko-630", quantidadeInversores: "2", inversorId: "hoymiles-1600", tipoInversor: "Microinversor", valor: "R$ 6.999,00" },
   { id: "400", nome: "Kit 400 kWh", geracao: "400", potencia: "2,84 kWp", quantidadeModulos: "4", moduloId: "jinko-710", quantidadeInversores: "2", inversorId: "hoymiles-2000", tipoInversor: "Microinversor", valor: "R$ 8.399,00" },
@@ -52,12 +38,9 @@ const kits: KitSolar[] = [
 ];
 
 type Formulario = {
-  clienteId: string;
   nome: string;
   telefone: string;
   cidade: string;
-  enderecoCliente: string;
-  cpfCnpj: string;
   consumo: string;
   valorConta: string;
   kitId: string;
@@ -83,8 +66,7 @@ type Formulario = {
 };
 
 const formularioInicial: Formulario = {
-  clienteId: "", nome: "", telefone: "", cidade: "", enderecoCliente: "", cpfCnpj: "",
-  consumo: "", valorConta: "", kitId: "",
+  nome: "", telefone: "", cidade: "", consumo: "", valorConta: "", kitId: "",
   modoSistema: "kit", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "",
   quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "",
   percentualCartao: "", parcelasCartao: "18", percentualFinanciamento: "", parcelasFinanciamento: "84",
@@ -187,13 +169,30 @@ export default function FormularioProposta() {
   const [modulos, setModulos] = useState<Equipamento[]>(modulosPadrao);
   const [inversores, setInversores] = useState<Equipamento[]>(inversoresPadrao);
   const [microinversores, setMicroinversores] = useState<Equipamento[]>(microinversoresPadrao);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [carregandoClientes, setCarregandoClientes] = useState(true);
-  const [erroClientes, setErroClientes] = useState("");
-  const [escalaPreview, setEscalaPreview] = useState(1);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewCelularRef = useRef<HTMLDivElement>(null);
-  const previewAreaRef = useRef<HTMLElement>(null);
+  const previewAreaRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(0.68);
+
+  useEffect(() => {
+    const area = previewAreaRef.current;
+    if (!area) return;
+
+    const atualizarEscala = () => {
+      const larguraDisponivel = Math.max(area.clientWidth - 16, 280);
+      setPreviewScale(Math.min(larguraDisponivel / 818, 0.96));
+    };
+
+    atualizarEscala();
+    const observador = new ResizeObserver(atualizarEscala);
+    observador.observe(area);
+    window.addEventListener("resize", atualizarEscala);
+
+    return () => {
+      observador.disconnect();
+      window.removeEventListener("resize", atualizarEscala);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -206,60 +205,6 @@ export default function FormularioProposta() {
     } catch (erro) {
       console.error("Não foi possível carregar os equipamentos:", erro);
     }
-  }, []);
-
-  useEffect(() => {
-    let ativo = true;
-
-    async function carregarClientes() {
-      setCarregandoClientes(true);
-      setErroClientes("");
-
-      const { data, error } = await supabase
-        .from("clientes")
-        .select("*")
-        .order("nome", { ascending: true });
-
-      if (!ativo) return;
-
-      if (error) {
-        console.error("Erro ao carregar clientes:", error);
-        setErroClientes(`Não foi possível carregar os clientes: ${error.message}`);
-        setClientes([]);
-      } else {
-        setClientes((data ?? []) as Cliente[]);
-      }
-
-      setCarregandoClientes(false);
-    }
-
-    void carregarClientes();
-
-    return () => {
-      ativo = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const elemento = previewAreaRef.current;
-    if (!elemento) return;
-
-    const ajustar = () => {
-      const larguraDisponivel = Math.max(elemento.clientWidth - 16, 280);
-      const novaEscala = Math.min(1, Math.max(0.32, larguraDisponivel / 794));
-      setEscalaPreview(novaEscala);
-    };
-
-    ajustar();
-
-    const observador = new ResizeObserver(ajustar);
-    observador.observe(elemento);
-    window.addEventListener("resize", ajustar);
-
-    return () => {
-      observador.disconnect();
-      window.removeEventListener("resize", ajustar);
-    };
   }, []);
 
   useEffect(() => {
@@ -338,50 +283,10 @@ export default function FormularioProposta() {
     }
   }
 
-  function selecionarCliente(clienteId: string) {
-    const cliente = clientes.find((item) => String(item.id) === clienteId);
-
-    if (!cliente) {
-      setFormulario((anterior) => ({
-        ...anterior,
-        clienteId: "",
-        nome: "",
-        telefone: "",
-        cidade: "",
-        enderecoCliente: "",
-        cpfCnpj: "",
-      }));
-      return;
-    }
-
-    const cpfCnpj =
-      cliente.cpf_cnpj?.trim() ||
-      cliente.cpf?.trim() ||
-      cliente.cnpj?.trim() ||
-      "";
-
-    setFormulario((anterior) => ({
-      ...anterior,
-      clienteId: String(cliente.id),
-      nome: cliente.nome ?? "",
-      telefone: cliente.telefone ?? "",
-      cidade: cliente.cidade ?? "",
-      enderecoCliente: cliente.endereco ?? "",
-      cpfCnpj,
-    }));
-  }
-
   function mudarModo(modoSistema: Formulario["modoSistema"]) {
     setFormulario((anterior) => ({
       ...formularioInicial,
-      clienteId: anterior.clienteId,
-      nome: anterior.nome,
-      telefone: anterior.telefone,
-      cidade: anterior.cidade,
-      enderecoCliente: anterior.enderecoCliente,
-      cpfCnpj: anterior.cpfCnpj,
-      consumo: anterior.consumo,
-      valorConta: anterior.valorConta,
+      nome: anterior.nome, telefone: anterior.telefone, cidade: anterior.cidade, consumo: anterior.consumo, valorConta: anterior.valorConta,
       percentualCartao: anterior.percentualCartao, parcelasCartao: anterior.parcelasCartao,
       percentualFinanciamento: anterior.percentualFinanciamento, parcelasFinanciamento: anterior.parcelasFinanciamento,
       enderecoLoja: anterior.enderecoLoja,
@@ -490,61 +395,15 @@ export default function FormularioProposta() {
     temaPDF: formulario.temaPDF,
   };
 
-  function adicionarLinkFechamento(pdf: jsPDF, pagina: HTMLElement) {
-    const botao = pagina.querySelector<HTMLAnchorElement>("[data-cta-fechamento]");
-    if (!botao) return;
-    const folha = pagina.getBoundingClientRect();
-    const area = botao.getBoundingClientRect();
-    const escalaX = pdf.internal.pageSize.getWidth() / folha.width;
-    const escalaY = pdf.internal.pageSize.getHeight() / folha.height;
-    pdf.link((area.left - folha.left) * escalaX, (area.top - folha.top) * escalaY,
-      area.width * escalaX, area.height * escalaY, { url: botao.href });
-  }
+  function adicionarLinkFechamento(pdf: jsPDF, indicePagina: number) {
+    if (indicePagina !== 2) return;
 
-  async function capturarPaginaSolar(pagina: HTMLElement, celular: boolean) {
-    await document.fonts.ready;
-    await esperarImagens(pagina);
-    if (Array.from(pagina.querySelectorAll<HTMLImageElement>("header img")).some((imagem) => !imagem.naturalWidth)) {
-      throw new Error("A fotografia ou o brasão do cabeçalho não carregou. Aguarde e tente novamente.");
-    }
-    const controle = new AbortController();
-    const captura = html2canvas(pagina, {
-      scale: celular ? 1.5 : 2,
-      signal: controle.signal,
-      windowWidth: 794,
-      windowHeight: 1123,
-      scrollX: 0,
-      scrollY: 0,
-      onclone: (documento, paginaClonada) => {
-        // Captura isolada: evita coordenadas negativas e recortes de ancestrais.
-        documento.body.replaceChildren(paginaClonada);
-        documento.body.style.margin = "0";
-        Object.assign(paginaClonada.style, {
-          position: "relative", left: "0", top: "0", margin: "0", zoom: "1",
-        });
-      },
-      useCORS: true,
-      allowTaint: false,
-      backgroundColor: formulario.temaPDF === "escuro" ? "#09090b" : "#ffffff",
-      logging: false,
-      imageTimeout: 10000,
-      removeContainer: true,
-    });
-    let temporizador: ReturnType<typeof setTimeout> | undefined;
-    try {
-      return await Promise.race([
-        captura,
-        new Promise<never>((_, rejeitar) => {
-          temporizador = setTimeout(() => {
-            rejeitar(new Error("A captura demorou mais de 20 segundos. Tente novamente usando PDF Celular."));
-            controle.abort();
-          }, 20000);
-        }),
-      ]);
-    } finally {
-      if (temporizador !== undefined) clearTimeout(temporizador);
-    }
+    const url =
+      "https://wa.me/5579999390653?text=" +
+      encodeURIComponent("Olá, quero fechar minha proposta de Energia Solar com a CHOQUESEG.");
 
+    // Área clicável sobre o botão de fechamento na terceira página do PDF.
+    pdf.link(112, 247, 88, 25, { url });
   }
 
  async function gerarPDF() {
@@ -562,8 +421,8 @@ export default function FormularioProposta() {
       raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
     );
 
-    if (paginas.length !== 4) {
-      alert("A proposta Solar precisa conter exatamente quatro páginas.");
+    if (paginas.length === 0) {
+      alert("Nenhuma página da proposta foi encontrada.");
       return;
     }
 
@@ -577,9 +436,33 @@ export default function FormularioProposta() {
     for (let indice = 0; indice < paginas.length; indice += 1) {
       const pagina = paginas[indice];
 
-      const canvas = await capturarPaginaSolar(pagina, false);
+      console.log(`Iniciando página ${indice + 1}`);
 
-      const imagem = canvas.toDataURL("image/jpeg", 0.94);
+      const captura = html2canvas(pagina, {
+        scale: 0.8,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#000000",
+        logging: true,
+        imageTimeout: 5000,
+        removeContainer: true,
+      });
+
+      const limiteTempo = new Promise<never>((_, rejeitar) => {
+        setTimeout(() => {
+          rejeitar(
+            new Error(
+              `A página ${indice + 1} demorou mais de 20 segundos para ser processada.`,
+            ),
+          );
+        }, 20000);
+      });
+
+      const canvas = await Promise.race([captura, limiteTempo]);
+
+      console.log(`Página ${indice + 1} capturada`);
+
+      const imagem = canvas.toDataURL("image/jpeg", 0.6);
 
       if (indice > 0) {
         pdf.addPage();
@@ -596,7 +479,7 @@ export default function FormularioProposta() {
         "FAST",
       );
 
-      adicionarLinkFechamento(pdf, pagina);
+      adicionarLinkFechamento(pdf, indice);
 
       canvas.width = 1;
       canvas.height = 1;
@@ -636,8 +519,8 @@ export default function FormularioProposta() {
         raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
       );
 
-      if (paginas.length !== 4) {
-        alert("A proposta Solar precisa conter exatamente quatro páginas.");
+      if (paginas.length === 0) {
+        alert("Nenhuma página da proposta para celular foi encontrada.");
         return;
       }
 
@@ -652,7 +535,17 @@ export default function FormularioProposta() {
 
       for (let indice = 0; indice < paginas.length; indice += 1) {
         const pagina = paginas[indice];
-        const canvas = await capturarPaginaSolar(pagina, true);
+        await esperarImagens(pagina);
+
+        const canvas = await html2canvas(pagina, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#ffffff",
+          logging: false,
+          imageTimeout: 5000,
+          removeContainer: true,
+        });
 
         const imagem = canvas.toDataURL("image/jpeg", 0.9);
         if (indice > 0) pdf.addPage("a4", "portrait");
@@ -660,7 +553,8 @@ export default function FormularioProposta() {
         pdf.addImage(
           imagem, "JPEG", 0, 0, larguraPdf, alturaPdf, undefined, "FAST",
         );
-        adicionarLinkFechamento(pdf, pagina);
+
+        adicionarLinkFechamento(pdf, indice);
 
         canvas.width = 1;
         canvas.height = 1;
@@ -689,31 +583,21 @@ export default function FormularioProposta() {
   function montarMensagemWhatsApp() {
     const nome = formulario.nome.trim() || "cliente";
     const potenciaSistema =
-      formulario.modoSistema === "personalizado"
-        ? potenciaCalculada
-        : formulario.potencia;
+      formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia;
 
-    const valorVista =
-      calculos.valorBase > 0
-        ? dinheiro(calculos.valorBase)
-        : formulario.valorProposta || "—";
-
-    const cartao =
-      calculos.parcelaCartao > 0
-        ? `${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}`
-        : `até ${calculos.parcelasCartao}x`;
-
-    return [
+    const linhas = [
       `Olá, ${nome}! Segue sua proposta de Energia Solar da CHOQUESEG.`,
       formulario.geracao ? `Geração estimada: ${formulario.geracao} kWh/mês.` : "",
       potenciaSistema ? `Potência do sistema: ${potenciaSistema}.` : "",
-      `Valor à vista: ${valorVista}.`,
-      `Cartão: ${cartao}.`,
+      calculos.valorBase > 0 ? `Valor à vista: ${dinheiro(calculos.valorBase)}.` : "",
+      calculos.totalCartao > 0
+        ? `Cartão: ${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}.`
+        : "",
       "Financiamento em até 84 meses, sujeito à análise e aprovação.",
-      "Materiais, equipamentos e garantias estão detalhados no PDF.",
-    ]
-      .filter(Boolean)
-      .join("\n");
+      "Materiais, equipamentos e garantias estão detalhados no PDF da proposta.",
+    ];
+
+    return linhas.filter(Boolean).join("\n");
   }
 
   function abrirWhatsApp() {
@@ -742,8 +626,8 @@ export default function FormularioProposta() {
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3">
           <div><p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-400">ChoqueSeg</p><h1 className="text-lg font-black uppercase md:text-2xl">Gerador de proposta solar</h1></div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={gerarPDF} disabled={gerandoPDF || gerandoPDFCelular || processandoFoto !== null} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Gerando PDF..." : "Gerar PDF"}</button>
-            <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDF || gerandoPDFCelular || processandoFoto !== null} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
+            <button type="button" onClick={gerarPDF} disabled={gerandoPDF} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Gerando PDF..." : "Gerar PDF"}</button>
+            <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDFCelular} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
             <button
               type="button"
               onClick={() => atualizarCampo("temaPDF", "claro")}
@@ -784,39 +668,13 @@ export default function FormularioProposta() {
           <div className="mb-6 text-center"><img src="/imagens/logo/brasao-choqueseg.png" alt="Brasão ChoqueSeg" className="mx-auto h-24 w-24 object-contain" /><p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">Preenchimento da proposta</p></div>
           <div className="space-y-5">
             <SecaoFormulario titulo="Cliente">
-              <Select
-                titulo={carregandoClientes ? "Carregando clientes..." : "Cliente cadastrado"}
-                valor={formulario.clienteId}
-                aoAlterar={selecionarCliente}
-                opcoes={clientes.map((cliente) => ({
-                  valor: String(cliente.id),
-                  texto: cliente.nome,
-                }))}
-              />
-
-              {erroClientes && (
-                <div className="rounded-xl border border-red-500/60 bg-red-950/30 px-3 py-2 text-xs font-bold text-red-200">
-                  {erroClientes}
-                </div>
-              )}
-
-              <p className="text-xs leading-relaxed text-zinc-400">
-                Ao selecionar um cliente, nome, telefone, cidade, endereço e CPF/CNPJ são preenchidos automaticamente. Todos continuam editáveis.
-              </p>
-
               <Campo titulo="Nome" valor={formulario.nome} aoAlterar={(v) => atualizarCampo("nome", v)} />
-              <div className="grid grid-cols-2 gap-3">
-                <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
-                <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
-              </div>
-              <Campo titulo="Endereço do cliente" valor={formulario.enderecoCliente} aoAlterar={(v) => atualizarCampo("enderecoCliente", v)} />
-              <Campo titulo="CPF / CNPJ" valor={formulario.cpfCnpj} aoAlterar={(v) => atualizarCampo("cpfCnpj", v)} />
-
+              <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
+              <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
               <div className="grid grid-cols-2 gap-3">
                 <Campo titulo="Consumo kWh" valor={formulario.consumo} aoAlterar={(v) => atualizarCampo("consumo", v)} />
                 <Campo titulo="Conta mensal (R$)" valor={formulario.valorConta} aoAlterar={(v) => atualizarCampo("valorConta", v)} />
               </div>
-
               {validacaoEconomia.mostrar && (
                 <div className="rounded-xl border border-red-500/70 bg-red-950/40 px-3 py-2 text-xs font-bold leading-relaxed text-red-200">
                   ⚠ {validacaoEconomia.texto}
@@ -939,10 +797,17 @@ export default function FormularioProposta() {
           ref={previewAreaRef}
           className="min-w-0 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-2"
         >
-          <div className="flex w-full justify-center overflow-hidden">
+          <div
+            className="flex w-full justify-center overflow-hidden"
+            style={{ height: `${Math.ceil(3465 * previewScale)}px` }}
+          >
             <div
-              className="w-[794px] origin-top"
-              style={{ zoom: escalaPreview } as CSSProperties}
+              className="origin-top"
+              style={{
+                width: "818px",
+                transform: `scale(${previewScale})`,
+                transformOrigin: "top center",
+              }}
             >
               <PreviewProposta ref={previewRef} dados={dadosPreview} />
             </div>

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
@@ -15,7 +15,6 @@ import DashboardModule from "@/modules/dashboard/DashboardModule";
 import AgendaModule from "@/modules/agenda/AgendaModule";
 import FuncionariosModule from "@/modules/funcionarios/FuncionariosModule";
 import FinanceiroModule from "@/modules/financeiro/FinanceiroModule";
-import RecibosModule from "@/modules/recibos/RecibosModule";
 import EstoqueModule from "@/modules/estoque/EstoqueModule";
 import FormularioAutomacao from "@/components/FormularioAutomacao";
 
@@ -89,7 +88,7 @@ type TelaSistema =
   | "funil"
   | "agenda"
   | "financeiro"
-  | "recibos"  | "funcionarios"
+  | "funcionarios"
   | "estoque"
   | "vistorias"
   | "engenharia"
@@ -1005,10 +1004,6 @@ export default function Home() {
 
           {telaAtual === "financeiro" && ehAdministrador && (
             <FinanceiroModule usuarioNome={usuarioLogado.nome} />
-          )}
-
-          {telaAtual === "recibos" && ehAdministrador && (
-            <RecibosModule />
           )}
 
           {telaAtual === "estoque" && ehAdministrador && (
@@ -2069,4 +2064,3 @@ function ModuloEmConstrucao({
     </section>
   );
 }
-

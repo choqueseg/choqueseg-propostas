@@ -50,11 +50,31 @@ type ModeloContrato = {
 
 type ContratoSalvo = {
   id: string;
+  cliente_id?: string | null;
   cliente_nome: string;
+  cliente_cpf_cnpj?: string | null;
+  cliente_telefone?: string | null;
+  cliente_endereco?: string | null;
+  cliente_cidade?: string | null;
   tipo_contrato: string;
   data_contrato: string;
+  quantidade_modulos?: number | null;
+  potencia_modulo?: string | null;
+  marca_modulo?: string | null;
+  modelo_modulo?: string | null;
+  potencia_sistema_kwp?: string | null;
+  marca_inversor?: string | null;
+  modelo_inversor?: string | null;
+  potencia_inversor?: string | null;
+  tensao_inversor?: string | null;
   valor_total: number | null;
+  forma_pagamento?: string | null;
+  condicoes_pagamento?: string | null;
+  conteudo_editado?: string | null;
   status: string | null;
+  arquivo_url?: string | null;
+  arquivo_tipo?: string | null;
+  dados_extraidos?: Record<string, unknown> | null;
 };
 
 type FormContrato = {
@@ -107,13 +127,30 @@ export default function ContratosModule() {
   const [contratos, setContratos] = useState<ContratoSalvo[]>([]);
   const [form, setForm] = useState<FormContrato>(formularioInicial);
   const [conteudoEditado, setConteudoEditado] = useState("");
-  const [secao, setSecao] = useState<"lista" | "novo" | "editor">("lista");
+  const [secao, setSecao] = useState<
+    "lista" | "novo" | "editor" | "modelo" | "digitalizar"
+  >("lista");
   const [mensagem, setMensagem] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
   const [propostasCliente, setPropostasCliente] = useState<PropostaSalva[]>([]);
   const [propostaIdSelecionada, setPropostaIdSelecionada] = useState("");
   const [carregandoPropostas, setCarregandoPropostas] = useState(false);
+  const [contratoExpandidoId, setContratoExpandidoId] = useState<string | null>(null);
+  const [contratoEmEdicaoId, setContratoEmEdicaoId] = useState<string | null>(null);
+  const [modeloEditado, setModeloEditado] = useState("");
+  const [arquivoDigitalizado, setArquivoDigitalizado] = useState<File | null>(null);
+  const [previewDigitalizacao, setPreviewDigitalizacao] = useState("");
+  const [lendoDocumento, setLendoDocumento] = useState(false);
+  const [digitalizacao, setDigitalizacao] = useState({
+    clienteNome: "",
+    clienteTelefone: "",
+    clienteEndereco: "",
+    clienteCidade: "",
+    clienteCpfCnpj: "",
+    tipoServico: "Energia Solar",
+    textoReconhecido: "",
+  });
 
   useEffect(() => {
     void carregarDados();
@@ -134,7 +171,9 @@ export default function ContratosModule() {
         .maybeSingle(),
       supabase
         .from("contratos")
-        .select("id,cliente_nome,tipo_contrato,data_contrato,valor_total,status")
+        .select(
+          "id,cliente_id,cliente_nome,cliente_cpf_cnpj,cliente_telefone,cliente_endereco,cliente_cidade,tipo_contrato,data_contrato,quantidade_modulos,potencia_modulo,marca_modulo,modelo_modulo,potencia_sistema_kwp,marca_inversor,modelo_inversor,potencia_inversor,tensao_inversor,valor_total,forma_pagamento,condicoes_pagamento,conteudo_editado,status,arquivo_url,arquivo_tipo,dados_extraidos",
+        )
         .order("criado_em", { ascending: false }),
     ]);
 
@@ -149,7 +188,9 @@ export default function ContratosModule() {
       console.error(modeloResp.error);
       setMensagem(`Erro ao carregar modelo: ${modeloResp.error.message}`);
     } else {
-      setModelo((modeloResp.data as ModeloContrato | null) ?? null);
+      const modeloAtual = (modeloResp.data as ModeloContrato | null) ?? null;
+      setModelo(modeloAtual);
+      setModeloEditado(modeloAtual?.conteudo ?? "");
     }
 
     if (contratosResp.error) {
@@ -336,24 +377,499 @@ export default function ContratosModule() {
         conteudo_editado: conteudoEditado,
         assinatura_cliente: null,
         status: "Rascunho",
-        criado_em: new Date().toISOString(),
         atualizado_em: new Date().toISOString(),
       };
 
-      const { error } = await supabase.from("contratos").insert(payload);
+      const resposta = contratoEmEdicaoId
+        ? await supabase
+            .from("contratos")
+            .update(payload)
+            .eq("id", contratoEmEdicaoId)
+        : await supabase.from("contratos").insert({
+            ...payload,
+            criado_em: new Date().toISOString(),
+          });
 
-      if (error) {
-        console.error(error);
-        setMensagem(`Erro ao salvar contrato na nuvem: ${error.message}`);
+      if (resposta.error) {
+        console.error(resposta.error);
+        setMensagem(
+          `${contratoEmEdicaoId ? "Erro ao atualizar" : "Erro ao salvar"} contrato na nuvem: ${resposta.error.message}`,
+        );
         return;
       }
 
-      setMensagem("Contrato salvo e sincronizado com a nuvem.");
+      setMensagem(
+        contratoEmEdicaoId
+          ? "Contrato atualizado e sincronizado com a nuvem."
+          : "Contrato salvo e sincronizado com a nuvem.",
+      );
+      setContratoEmEdicaoId(null);
       await carregarDados();
       setSecao("lista");
     } finally {
       setSalvando(false);
     }
+  }
+
+  function abrirContratoSalvo(contrato: ContratoSalvo) {
+    setContratoEmEdicaoId(contrato.id);
+    setForm({
+      clienteId: String(contrato.cliente_id ?? ""),
+      clienteNome: contrato.cliente_nome ?? "",
+      clienteCpfCnpj: contrato.cliente_cpf_cnpj ?? "",
+      clienteTelefone: contrato.cliente_telefone ?? "",
+      clienteEndereco: contrato.cliente_endereco ?? "",
+      clienteCidade: contrato.cliente_cidade ?? "",
+      quantidadeModulos:
+        contrato.quantidade_modulos != null
+          ? String(contrato.quantidade_modulos)
+          : "",
+      potenciaModulo: contrato.potencia_modulo ?? "",
+      marcaModulo: contrato.marca_modulo ?? "",
+      modeloModulo: contrato.modelo_modulo ?? "",
+      potenciaSistemaKwp: contrato.potencia_sistema_kwp ?? "",
+      marcaInversor: contrato.marca_inversor ?? "",
+      modeloInversor: contrato.modelo_inversor ?? "",
+      potenciaInversor: contrato.potencia_inversor ?? "",
+      tensaoInversor: contrato.tensao_inversor ?? "",
+      valorTotal:
+        contrato.valor_total != null
+          ? formatarNumeroContrato(Number(contrato.valor_total))
+          : "",
+      formaPagamento: contrato.forma_pagamento ?? "",
+      condicoesPagamento: contrato.condicoes_pagamento ?? "",
+      dataContrato:
+        contrato.data_contrato || new Date().toISOString().slice(0, 10),
+    });
+    setConteudoEditado(
+      contrato.conteudo_editado?.trim() ||
+        "Contrato digitalizado. O documento original está anexado ao cadastro.",
+    );
+    setMensagem("");
+    setSecao("editor");
+  }
+
+  async function salvarModeloEmpresa() {
+    if (!modelo) {
+      setMensagem("Nenhum modelo de contrato ativo foi encontrado.");
+      return;
+    }
+
+    if (!modeloEditado.trim()) {
+      setMensagem("O modelo do contrato não pode ficar vazio.");
+      return;
+    }
+
+    setSalvando(true);
+    setMensagem("");
+
+    try {
+      const { error } = await supabase
+        .from("modelos_contrato")
+        .update({ conteudo: modeloEditado })
+        .eq("id", modelo.id);
+
+      if (error) {
+        setMensagem(`Erro ao atualizar o modelo: ${error.message}`);
+        return;
+      }
+
+      setModelo({ ...modelo, conteudo: modeloEditado });
+      setMensagem("Modelo de contrato da CHOQUESEG atualizado com sucesso.");
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  function limparDigitalizacao() {
+    if (previewDigitalizacao) URL.revokeObjectURL(previewDigitalizacao);
+    setArquivoDigitalizado(null);
+    setPreviewDigitalizacao("");
+    setDigitalizacao({
+      clienteNome: "",
+      clienteTelefone: "",
+      clienteEndereco: "",
+      clienteCidade: "",
+      clienteCpfCnpj: "",
+      tipoServico: "Energia Solar",
+      textoReconhecido: "",
+    });
+  }
+
+  function normalizarTextoLeitura(valor: string) {
+    return valor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function extrairDadosDoTexto(texto: string) {
+    const linhas = texto
+      .split(/\r?\n/)
+      .map((linha) => linha.trim())
+      .filter(Boolean);
+
+    const telefone =
+      texto.match(
+        /(?:\+?55\s*)?(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4}[-.\s]?\d{4}/,
+      )?.[0] ?? "";
+
+    const cpfCnpj =
+      texto.match(
+        /\b(?:\d{3}\.?\d{3}\.?\d{3}-?\d{2}|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/,
+      )?.[0] ?? "";
+
+    const linhaEndereco =
+      linhas.find((linha) =>
+        /\b(rua|avenida|av\.|travessa|tv\.|rodovia|praça|praca|alameda|estrada)\b/i.test(
+          linha,
+        ),
+      ) ?? "";
+
+    const linhaNome =
+      linhas.find((linha) =>
+        /\b(cliente|contratante|nome)\b/i.test(linha),
+      ) ?? "";
+
+    const nome =
+      linhaNome
+        .replace(/^(cliente|contratante|nome)\s*[:\-]\s*/i, "")
+        .trim();
+
+    setDigitalizacao((atual) => ({
+      ...atual,
+      clienteNome: nome || atual.clienteNome,
+      clienteTelefone: telefone || atual.clienteTelefone,
+      clienteEndereco: linhaEndereco || atual.clienteEndereco,
+      clienteCpfCnpj: cpfCnpj || atual.clienteCpfCnpj,
+      textoReconhecido: texto,
+    }));
+  }
+
+  async function tentarLeituraAutomatica(arquivo: File) {
+    if (!arquivo.type.startsWith("image/")) return;
+
+    const TextDetectorClass = (window as any).TextDetector;
+    if (!TextDetectorClass) {
+      setMensagem(
+        "A foto foi carregada. Este navegador não oferece leitura automática local do texto; confira e preencha os dados do cliente antes de salvar.",
+      );
+      return;
+    }
+
+    setLendoDocumento(true);
+
+    try {
+      const bitmap = await createImageBitmap(arquivo);
+      const detector = new TextDetectorClass();
+      const blocos = await detector.detect(bitmap);
+      bitmap.close();
+
+      const texto = (blocos ?? [])
+        .map((bloco: any) => String(bloco.rawValue ?? ""))
+        .filter(Boolean)
+        .join("\n");
+
+      if (texto.trim()) {
+        extrairDadosDoTexto(texto);
+        setMensagem(
+          "Leitura automática concluída. Confira nome, telefone e endereço antes de confirmar.",
+        );
+      } else {
+        setMensagem(
+          "Não consegui identificar texto suficiente na imagem. Preencha os dados manualmente e confirme.",
+        );
+      }
+    } catch (erro) {
+      console.error("Leitura automática do contrato:", erro);
+      setMensagem(
+        "A foto foi carregada, mas a leitura automática não foi possível. Preencha os dados manualmente.",
+      );
+    } finally {
+      setLendoDocumento(false);
+    }
+  }
+
+  async function selecionarArquivoDigitalizacao(arquivo?: File | null) {
+    if (!arquivo) return;
+
+    if (arquivo.size > 15 * 1024 * 1024) {
+      setMensagem("O arquivo deve ter no máximo 15 MB.");
+      return;
+    }
+
+    if (previewDigitalizacao) URL.revokeObjectURL(previewDigitalizacao);
+    setArquivoDigitalizado(arquivo);
+    setPreviewDigitalizacao(URL.createObjectURL(arquivo));
+    setMensagem("Arquivo carregado. Confira os dados do cliente antes de salvar.");
+    await tentarLeituraAutomatica(arquivo);
+  }
+
+  function localizarClienteDigitalizacao() {
+    const telefone = digitalizacao.clienteTelefone.replace(/\D/g, "");
+    const nome = normalizarTextoLeitura(digitalizacao.clienteNome).toLowerCase();
+
+    return clientes.find((cliente) => {
+      const telefoneCliente = String(cliente.telefone ?? "").replace(/\D/g, "");
+      const nomeCliente = normalizarTextoLeitura(cliente.nome ?? "").toLowerCase();
+
+      return (
+        (telefone && telefoneCliente && telefone === telefoneCliente) ||
+        (nome && nomeCliente === nome)
+      );
+    });
+  }
+
+  async function salvarContratoDigitalizado() {
+    if (!arquivoDigitalizado) {
+      setMensagem("Fotografe ou selecione o contrato antes de salvar.");
+      return;
+    }
+
+    if (!digitalizacao.clienteNome.trim()) {
+      setMensagem("Confirme o nome completo do cliente.");
+      return;
+    }
+
+    if (!digitalizacao.clienteTelefone.trim()) {
+      setMensagem("Confirme o telefone do cliente.");
+      return;
+    }
+
+    setSalvando(true);
+    setMensagem("");
+
+    try {
+      let cliente = localizarClienteDigitalizacao();
+      let clienteId = cliente ? String(cliente.id) : "";
+
+      if (cliente) {
+        const { error } = await supabase
+          .from("clientes")
+          .update({
+            nome: digitalizacao.clienteNome.trim(),
+            telefone: digitalizacao.clienteTelefone.trim(),
+            endereco: digitalizacao.clienteEndereco.trim(),
+            cidade: digitalizacao.clienteCidade.trim(),
+            cpf_cnpj: digitalizacao.clienteCpfCnpj.trim(),
+            tipo_servico: digitalizacao.tipoServico,
+          })
+          .eq("id", cliente.id);
+
+        if (error) throw error;
+      } else {
+        clienteId = crypto.randomUUID();
+
+        const { error } = await supabase.from("clientes").insert({
+          id: clienteId,
+          nome: digitalizacao.clienteNome.trim(),
+          telefone: digitalizacao.clienteTelefone.trim(),
+          endereco: digitalizacao.clienteEndereco.trim(),
+          cidade: digitalizacao.clienteCidade.trim(),
+          cpf_cnpj: digitalizacao.clienteCpfCnpj.trim(),
+          tipo_servico: digitalizacao.tipoServico,
+          origem: "Outro",
+          observacoes: "Cliente vinculado a contrato digitalizado.",
+          status: "Novo Cliente",
+          criado_em: new Date().toISOString(),
+          retorno_em: null,
+        });
+
+        if (error) throw error;
+      }
+
+      const contratoId = crypto.randomUUID();
+      const nomeSeguro = arquivoDigitalizado.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-");
+      const caminho = `${contratoId}/${Date.now()}-${nomeSeguro}`;
+
+      const { error: erroUpload } = await supabase.storage
+        .from("contratos")
+        .upload(caminho, arquivoDigitalizado, {
+          contentType: arquivoDigitalizado.type || undefined,
+          upsert: false,
+        });
+
+      if (erroUpload) throw erroUpload;
+
+      const dadosExtraidos = {
+        nome: digitalizacao.clienteNome.trim(),
+        telefone: digitalizacao.clienteTelefone.trim(),
+        endereco: digitalizacao.clienteEndereco.trim(),
+        cidade: digitalizacao.clienteCidade.trim(),
+        cpfCnpj: digitalizacao.clienteCpfCnpj.trim(),
+        tipoServico: digitalizacao.tipoServico,
+        textoReconhecido: digitalizacao.textoReconhecido,
+      };
+
+      const { error: erroContrato } = await supabase.from("contratos").insert({
+        id: contratoId,
+        cliente_id: clienteId || null,
+        cliente_nome: digitalizacao.clienteNome.trim(),
+        cliente_cpf_cnpj: digitalizacao.clienteCpfCnpj.trim(),
+        cliente_telefone: digitalizacao.clienteTelefone.trim(),
+        cliente_endereco: digitalizacao.clienteEndereco.trim(),
+        cliente_cidade: digitalizacao.clienteCidade.trim(),
+        tipo_contrato: "contrato_existente",
+        data_contrato: new Date().toISOString().slice(0, 10),
+        valor_total: null,
+        forma_pagamento: "",
+        condicoes_pagamento: "",
+        conteudo_editado:
+          digitalizacao.textoReconhecido.trim() ||
+          "Contrato físico/digitalizado anexado ao cadastro.",
+        assinatura_cliente: null,
+        status: "Digitalizado",
+        arquivo_url: caminho,
+        arquivo_tipo: arquivoDigitalizado.type || "",
+        dados_extraidos: dadosExtraidos,
+        criado_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+      });
+
+      if (erroContrato) {
+        await supabase.storage.from("contratos").remove([caminho]);
+        throw erroContrato;
+      }
+
+      const { error: erroAnexo } = await supabase
+        .from("contrato_anexos")
+        .insert({
+          contrato_id: contratoId,
+          arquivo_url: caminho,
+          arquivo_tipo: arquivoDigitalizado.type || "",
+          nome_arquivo: arquivoDigitalizado.name,
+          criado_em: new Date().toISOString(),
+        });
+
+      if (erroAnexo) {
+        console.error("Contrato salvo, mas houve erro ao registrar anexo:", erroAnexo);
+      }
+
+      setMensagem(
+        "Contrato digitalizado salvo. O cliente foi vinculado/cadastrado e já ficará disponível em Clientes, Funil, Propostas e Agenda.",
+      );
+      limparDigitalizacao();
+      await carregarDados();
+      setSecao("lista");
+    } catch (erro) {
+      console.error("Erro ao salvar contrato digitalizado:", erro);
+      setMensagem(
+        erro instanceof Error
+          ? `Erro ao salvar contrato digitalizado: ${erro.message}`
+          : "Não foi possível salvar o contrato digitalizado.",
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluirContrato(contrato: ContratoSalvo) {
+    const confirmar = window.confirm(
+      `Deseja realmente excluir o contrato de ${contrato.cliente_nome}?\n\nEssa ação não pode ser desfeita.`,
+    );
+
+    if (!confirmar) return;
+
+    setSalvando(true);
+    setMensagem("");
+
+    try {
+      // Primeiro exclui o registro principal.
+      // A limpeza de anexo/Storage é feita depois e não impede a exclusão.
+      const { error: erroContrato } = await supabase
+        .from("contratos")
+        .delete()
+        .eq("id", contrato.id);
+
+      if (erroContrato) {
+        throw new Error(erroContrato.message);
+      }
+
+      // Atualiza a tela imediatamente.
+      setContratos((atuais) =>
+        atuais.filter((item) => item.id !== contrato.id),
+      );
+
+      if (contratoExpandidoId === contrato.id) {
+        setContratoExpandidoId(null);
+      }
+
+      if (contratoEmEdicaoId === contrato.id) {
+        setContratoEmEdicaoId(null);
+        setSecao("lista");
+      }
+
+      // Limpeza dos anexos no banco: melhor esforço.
+      const { error: erroAnexos } = await supabase
+        .from("contrato_anexos")
+        .delete()
+        .eq("contrato_id", contrato.id);
+
+      if (erroAnexos) {
+        console.warn(
+          "Contrato excluído, mas não foi possível limpar contrato_anexos:",
+          erroAnexos,
+        );
+      }
+
+      // Limpeza do arquivo principal no Storage: melhor esforço.
+      const caminho = contrato.arquivo_url?.trim();
+
+      if (caminho && !/^https?:\/\//i.test(caminho)) {
+        const { error: erroStorage } = await supabase.storage
+          .from("contratos")
+          .remove([caminho]);
+
+        if (erroStorage) {
+          console.warn(
+            "Contrato excluído, mas não foi possível remover arquivo do Storage:",
+            erroStorage,
+          );
+        }
+      }
+
+      setMensagem(`Contrato de ${contrato.cliente_nome} excluído com sucesso.`);
+    } catch (erro) {
+      console.error("Erro ao excluir contrato:", erro);
+
+      setMensagem(
+        erro instanceof Error
+          ? `Erro ao excluir contrato: ${erro.message}`
+          : "Não foi possível excluir o contrato.",
+      );
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function abrirArquivoContrato(contrato: ContratoSalvo) {
+    const caminho = contrato.arquivo_url?.trim();
+    if (!caminho) {
+      setMensagem("Este contrato não possui arquivo anexado.");
+      return;
+    }
+
+    if (/^https?:\/\//i.test(caminho)) {
+      window.open(caminho, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    const { data, error } = await supabase.storage
+      .from("contratos")
+      .createSignedUrl(caminho, 600);
+
+    if (error || !data?.signedUrl) {
+      setMensagem(
+        `Não foi possível abrir o arquivo do contrato: ${error?.message ?? "link indisponível"}`,
+      );
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank", "noopener,noreferrer");
   }
 
   function criarPdfContrato() {
@@ -589,6 +1105,7 @@ export default function ContratosModule() {
   }
 
   function novoContrato() {
+    setContratoEmEdicaoId(null);
     setForm({
       ...formularioInicial,
       dataContrato: new Date().toISOString().slice(0, 10),
@@ -640,6 +1157,26 @@ export default function ContratosModule() {
                 icone="➕"
                 titulo="Novo contrato"
               />
+
+              <BotaoMenu
+                ativo={secao === "modelo"}
+                onClick={() => {
+                  setModeloEditado(modelo?.conteudo ?? "");
+                  setSecao("modelo");
+                }}
+                icone="📝"
+                titulo="Modelo da empresa"
+              />
+
+              <BotaoMenu
+                ativo={secao === "digitalizar"}
+                onClick={() => {
+                  limparDigitalizacao();
+                  setSecao("digitalizar");
+                }}
+                icone="📷"
+                titulo="Digitalizar contrato"
+              />
             </nav>
           </div>
         </aside>
@@ -657,35 +1194,302 @@ export default function ContratosModule() {
                     Nenhum contrato cadastrado.
                   </div>
                 ) : (
-                  contratos.map((contrato) => (
-                    <article
-                      key={contrato.id}
-                      className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
-                    >
-                      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                        <div>
-                          <p className="text-xs font-black uppercase text-yellow-400">
-                            Energia Solar
-                          </p>
-                          <h4 className="mt-1 text-lg font-black text-white">
-                            {contrato.cliente_nome}
-                          </h4>
-                          <p className="mt-1 text-sm text-zinc-400">
-                            {formatarData(contrato.data_contrato)}
-                            {contrato.valor_total != null
-                              ? ` · ${formatarMoeda(contrato.valor_total)}`
-                              : ""}
-                          </p>
-                        </div>
+                  contratos.map((contrato) => {
+                    const expandido = contratoExpandidoId === contrato.id;
 
-                        <span className="w-fit rounded-lg bg-yellow-400/10 px-3 py-1 text-xs font-black uppercase text-yellow-400">
-                          {contrato.status || "Rascunho"}
-                        </span>
-                      </div>
-                    </article>
-                  ))
+                    return (
+                      <article
+                        key={contrato.id}
+                        className="rounded-2xl border border-zinc-800 bg-zinc-950 transition hover:border-zinc-700"
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setContratoExpandidoId((atual) =>
+                              atual === contrato.id ? null : contrato.id,
+                            )
+                          }
+                          className="flex w-full items-center justify-between gap-3 p-4 text-left"
+                          aria-expanded={expandido}
+                        >
+                          <div className="min-w-0">
+                            <h4 className="truncate text-lg font-black uppercase text-white">
+                              {contrato.cliente_nome}
+                            </h4>
+                            <p className="mt-1 text-sm font-bold text-yellow-400">
+                              {contrato.tipo_contrato === "contrato_existente"
+                                ? "📷 Contrato digitalizado"
+                                : "☀️ Energia Solar"}
+                            </p>
+                            <p className="mt-1 text-sm text-zinc-400">
+                              {formatarData(contrato.data_contrato)}
+                            </p>
+                          </div>
+
+                          <span className="shrink-0 rounded-xl border border-zinc-700 bg-black px-3 py-2 text-sm font-black text-zinc-300">
+                            {expandido ? "▲" : "▼"}
+                          </span>
+                        </button>
+
+                        {expandido && (
+                          <div className="border-t border-zinc-800 px-4 pb-4 pt-4">
+                            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                              <ResumoContrato
+                                titulo="Status"
+                                valor={contrato.status || "Rascunho"}
+                              />
+                              <ResumoContrato
+                                titulo="Telefone"
+                                valor={contrato.cliente_telefone || "Não informado"}
+                              />
+                              <ResumoContrato
+                                titulo="Cidade"
+                                valor={contrato.cliente_cidade || "Não informada"}
+                              />
+                              <ResumoContrato
+                                titulo="Valor"
+                                valor={
+                                  contrato.valor_total != null
+                                    ? formatarMoeda(contrato.valor_total)
+                                    : "Não informado"
+                                }
+                              />
+                            </div>
+
+                            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => abrirContratoSalvo(contrato)}
+                                className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400"
+                              >
+                                Visualizar / editar
+                              </button>
+
+                              {contrato.arquivo_url && (
+                                <button
+                                  type="button"
+                                  onClick={() => void abrirArquivoContrato(contrato)}
+                                  className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black uppercase text-black"
+                                >
+                                  Abrir original
+                                </button>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => void excluirContrato(contrato)}
+                                disabled={salvando}
+                                className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400 disabled:opacity-50"
+                              >
+                                🗑 Excluir contrato
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </article>
+                    );
+                  })
                 )}
               </div>
+            </section>
+          )}
+
+          {secao === "modelo" && (
+            <section className="rounded-3xl border border-yellow-400/30 bg-black p-5">
+              <p className="text-xs font-black uppercase text-yellow-400">
+                Contrato padrão CHOQUESEG
+              </p>
+              <h3 className="mt-1 text-xl font-black uppercase text-white">
+                Modelo da empresa
+              </h3>
+              <p className="mt-3 text-sm text-zinc-400">
+                Este é o texto usado para montar novos contratos de Energia Solar.
+                Faça alterações somente quando quiser mudar o modelo padrão para os próximos contratos.
+              </p>
+
+              <textarea
+                value={modeloEditado}
+                onChange={(evento) => setModeloEditado(evento.target.value)}
+                rows={34}
+                className="mt-5 w-full rounded-2xl border border-zinc-700 bg-zinc-950 p-5 font-mono text-sm leading-6 text-zinc-100 outline-none focus:border-yellow-400"
+              />
+
+              <button
+                type="button"
+                onClick={() => void salvarModeloEmpresa()}
+                disabled={salvando}
+                className="mt-5 rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black disabled:opacity-60"
+              >
+                {salvando ? "Salvando..." : "Salvar modelo da empresa"}
+              </button>
+            </section>
+          )}
+
+          {secao === "digitalizar" && (
+            <section className="rounded-3xl border border-yellow-400/30 bg-black p-5">
+              <p className="text-xs font-black uppercase text-yellow-400">
+                Arquivo físico / contrato antigo
+              </p>
+              <h3 className="mt-1 text-xl font-black uppercase text-white">
+                Fotografar ou anexar contrato
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+                Fotografe o contrato pelo celular ou escolha uma foto/PDF. O sistema
+                tenta identificar os dados quando o navegador oferece leitura local.
+                Sempre confira os campos antes de confirmar.
+              </p>
+
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <label className="cursor-pointer rounded-xl bg-yellow-400 px-5 py-3 text-center font-black uppercase text-black">
+                  📷 Fotografar contrato
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(evento) =>
+                      void selecionarArquivoDigitalizacao(evento.target.files?.[0])
+                    }
+                  />
+                </label>
+
+                <label className="cursor-pointer rounded-xl border border-yellow-400 px-5 py-3 text-center font-black uppercase text-yellow-400">
+                  📎 Selecionar foto ou PDF
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="hidden"
+                    onChange={(evento) =>
+                      void selecionarArquivoDigitalizacao(evento.target.files?.[0])
+                    }
+                  />
+                </label>
+              </div>
+
+              {lendoDocumento && (
+                <div className="mt-4 rounded-xl border border-blue-400/30 bg-blue-400/10 px-4 py-3 text-sm font-bold text-blue-200">
+                  Lendo informações da imagem...
+                </div>
+              )}
+
+              {previewDigitalizacao && arquivoDigitalizado && (
+                <div className="mt-5 rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+                  <p className="text-xs font-black uppercase text-zinc-500">
+                    Documento selecionado
+                  </p>
+                  <p className="mt-1 break-all font-bold text-white">
+                    {arquivoDigitalizado.name}
+                  </p>
+
+                  {arquivoDigitalizado.type.startsWith("image/") && (
+                    <img
+                      src={previewDigitalizacao}
+                      alt="Pré-visualização do contrato"
+                      className="mt-4 max-h-[420px] w-full rounded-xl object-contain"
+                    />
+                  )}
+
+                  {arquivoDigitalizado.type === "application/pdf" && (
+                    <p className="mt-3 text-sm text-zinc-400">
+                      PDF selecionado. Ele será salvo no arquivo do contrato.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <h4 className="mt-6 text-sm font-black uppercase text-yellow-400">
+                Confira os dados do cliente
+              </h4>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <CampoTexto
+                  label="Nome completo *"
+                  valor={digitalizacao.clienteNome}
+                  onChange={(valor) =>
+                    setDigitalizacao({ ...digitalizacao, clienteNome: valor })
+                  }
+                />
+                <CampoTexto
+                  label="Telefone *"
+                  valor={digitalizacao.clienteTelefone}
+                  onChange={(valor) =>
+                    setDigitalizacao({ ...digitalizacao, clienteTelefone: valor })
+                  }
+                />
+                <CampoTexto
+                  label="CPF / CNPJ"
+                  valor={digitalizacao.clienteCpfCnpj}
+                  onChange={(valor) =>
+                    setDigitalizacao({ ...digitalizacao, clienteCpfCnpj: valor })
+                  }
+                />
+                <CampoTexto
+                  label="Cidade"
+                  valor={digitalizacao.clienteCidade}
+                  onChange={(valor) =>
+                    setDigitalizacao({ ...digitalizacao, clienteCidade: valor })
+                  }
+                />
+                <div className="md:col-span-2">
+                  <CampoTexto
+                    label="Endereço"
+                    valor={digitalizacao.clienteEndereco}
+                    onChange={(valor) =>
+                      setDigitalizacao({ ...digitalizacao, clienteEndereco: valor })
+                    }
+                  />
+                </div>
+
+                <CampoSelect
+                  label="Tipo de serviço"
+                  valor={digitalizacao.tipoServico}
+                  onChange={(valor) =>
+                    setDigitalizacao({ ...digitalizacao, tipoServico: valor })
+                  }
+                  opcoes={[
+                    { valor: "Energia Solar", rotulo: "Energia Solar" },
+                    { valor: "Segurança Eletrônica", rotulo: "Segurança Eletrônica" },
+                    { valor: "Elétrica", rotulo: "Elétrica" },
+                    { valor: "Automação", rotulo: "Automação" },
+                  ]}
+                />
+              </div>
+
+              {digitalizacao.textoReconhecido && (
+                <details className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <summary className="cursor-pointer font-black uppercase text-zinc-300">
+                    Texto reconhecido da foto
+                  </summary>
+                  <pre className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-zinc-500">
+                    {digitalizacao.textoReconhecido}
+                  </pre>
+                </details>
+              )}
+
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => void salvarContratoDigitalizado()}
+                  disabled={salvando || lendoDocumento}
+                  className="flex-1 rounded-xl bg-emerald-500 px-5 py-3 font-black uppercase text-black disabled:opacity-60"
+                >
+                  {salvando ? "Salvando..." : "✅ Confirmar e salvar contrato"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={limparDigitalizacao}
+                  className="rounded-xl border border-zinc-700 px-5 py-3 font-black uppercase text-zinc-300"
+                >
+                  Limpar
+                </button>
+              </div>
+
+              <p className="mt-4 text-xs leading-relaxed text-zinc-500">
+                Depois de salvo, o cliente fica na mesma tabela de Clientes usada pelo
+                Funil, Propostas e Agenda. Nenhum agendamento é criado sem data,
+                horário inicial/final e equipe.
+              </p>
             </section>
           )}
 
@@ -930,7 +1734,7 @@ export default function ContratosModule() {
                     Revisão final
                   </p>
                   <h3 className="mt-1 text-xl font-black uppercase text-white">
-                    Contrato de {form.clienteNome}
+                    {contratoEmEdicaoId ? "Contrato salvo" : "Contrato de"} {form.clienteNome}
                   </h3>
                 </div>
 
@@ -961,7 +1765,11 @@ export default function ContratosModule() {
                   disabled={salvando}
                   className="rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black disabled:opacity-60"
                 >
-                  {salvando ? "Salvando..." : "Salvar na nuvem"}
+                  {salvando
+                    ? "Salvando..."
+                    : contratoEmEdicaoId
+                      ? "Atualizar contrato"
+                      : "Salvar na nuvem"}
                 </button>
 
                 <button
@@ -1136,6 +1944,21 @@ function BotaoMenu({
       <span>{icone}</span>
       <span>{titulo}</span>
     </button>
+  );
+}
+
+function ResumoContrato({
+  titulo,
+  valor,
+}: {
+  titulo: string;
+  valor: string;
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-black p-3">
+      <p className="text-xs font-black uppercase text-zinc-500">{titulo}</p>
+      <p className="mt-1 break-words font-bold text-zinc-200">{valor}</p>
+    </div>
   );
 }
 

@@ -1,5 +1,4 @@
 
-
 import { useEffect, useState } from "react";
 import AssinaturaServico from "./AssinaturaServico";
 import ChecklistServico from "./ChecklistServico";
@@ -21,6 +20,7 @@ type Props = {
   podeVerContatoCliente: boolean;
   aoFechar: () => void;
   aoSalvar: (servico: Servico) => Promise<boolean | string> | boolean | string | void;
+  aoExcluir: (servicoId: string) => Promise<boolean> | boolean;
   aoAbrirMaps: (endereco: string, cidade: string) => void;
 };
 
@@ -104,6 +104,7 @@ export default function ModalServico({
   podeVerContatoCliente,
   aoFechar,
   aoSalvar,
+  aoExcluir,
   aoAbrirMaps,
 }: Props) {
   const [rascunho, setRascunho] = useState<Servico>(() => ({
@@ -314,6 +315,11 @@ function registrarChegadaCliente() {
     "Assinatura",
     "Concluir serviço",
   ];
+
+  async function excluirAgendamento() {
+    const excluido = await aoExcluir(rascunho.id);
+    if (excluido) aoFechar();
+  }
 
   return (
     <div className="fixed inset-0 z-[100] overflow-y-auto bg-black/90 p-2 backdrop-blur-sm md:p-4">
@@ -545,7 +551,14 @@ function registrarChegadaCliente() {
                 <Info titulo="Tipo de serviço" valor={rascunho.tipoServico} />
                 <Info titulo="Responsável" valor={rascunho.equipe} />
                 <Info titulo="Data" valor={rascunho.data} />
-                <Info titulo="Horário" valor={rascunho.horario} />
+                <Info
+                  titulo="Horário"
+                  valor={
+                    rascunho.horarioFim
+                      ? `${rascunho.horario} às ${rascunho.horarioFim}`
+                      : rascunho.horario
+                  }
+                />
                 <div className="sm:col-span-2">
                   <Info titulo="Descrição" valor={rascunho.descricao || "—"} />
                 </div>
@@ -556,23 +569,37 @@ function registrarChegadaCliente() {
           </div>
         </div>
 
-        <footer className="flex flex-col-reverse gap-3 border-t border-zinc-800 bg-black p-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={salvarAndamento}
-            disabled={bloqueado}
-            className="rounded-xl border border-zinc-700 px-5 py-3 font-black uppercase text-zinc-300 disabled:opacity-40"
-          >
-            Salvar andamento
-          </button>
+        <footer className="flex flex-col gap-3 border-t border-zinc-800 bg-black p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            {ehAdministrador && (
+              <button
+                type="button"
+                onClick={excluirAgendamento}
+                className="w-full rounded-xl border border-red-500/70 bg-red-500/10 px-5 py-3 font-black uppercase text-red-400 transition hover:bg-red-500 hover:text-white sm:w-auto"
+              >
+                Excluir serviço
+              </button>
+            )}
+          </div>
 
-          <button
-            type="button"
-            onClick={aoFechar}
-            className="rounded-xl border border-red-500 px-5 py-3 font-black uppercase text-red-400"
-          >
-            Fechar ordem
-          </button>
+          <div className="flex flex-col-reverse gap-3 sm:flex-row">
+            <button
+              type="button"
+              onClick={salvarAndamento}
+              disabled={bloqueado}
+              className="rounded-xl border border-zinc-700 px-5 py-3 font-black uppercase text-zinc-300 disabled:opacity-40"
+            >
+              Salvar andamento
+            </button>
+
+            <button
+              type="button"
+              onClick={aoFechar}
+              className="rounded-xl border border-zinc-700 px-5 py-3 font-black uppercase text-zinc-300"
+            >
+              Fechar ordem
+            </button>
+          </div>
         </footer>
       </div>
     </div>

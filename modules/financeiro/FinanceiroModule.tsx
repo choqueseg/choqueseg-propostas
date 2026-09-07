@@ -1,5 +1,6 @@
 "use client";
 import ContasFinanceiras from "./ContasFinanceiras";
+import CentralVozFinanceiro from "./CentralVozFinanceiro";
 import {
   ChangeEvent,
   FormEvent,
@@ -98,6 +99,7 @@ export default function FinanceiroModule({
   >("resumo");
 
   const conteudoFinanceiroRef = useRef<HTMLElement | null>(null);
+  const [versaoLembretes, setVersaoLembretes] = useState(0);
 
   function abrirSecaoFinanceiro(
     secao:
@@ -162,6 +164,81 @@ export default function FinanceiroModule({
       JSON.stringify(lancamentos),
     );
   }, [lancamentos, dadosCarregados]);
+
+  useEffect(() => {
+    const atualizarLembretes = () =>
+      setVersaoLembretes((valorAtual) => valorAtual + 1);
+
+    window.addEventListener(
+      "choqueseg-financeiro-atualizado",
+      atualizarLembretes,
+    );
+    window.addEventListener("storage", atualizarLembretes);
+    window.addEventListener("focus", atualizarLembretes);
+
+    return () => {
+      window.removeEventListener(
+        "choqueseg-financeiro-atualizado",
+        atualizarLembretes,
+      );
+      window.removeEventListener("storage", atualizarLembretes);
+      window.removeEventListener("focus", atualizarLembretes);
+    };
+  }, []);
+
+  const lembretesFinanceiros = useMemo(() => {
+    const hoje = hojeLocalISO();
+
+    function diasAteLocal(dataISO: string) {
+      if (!dataISO) return Number.POSITIVE_INFINITY;
+
+      const inicio = new Date(`${hoje}T12:00:00`);
+      const fim = new Date(`${dataISO}T12:00:00`);
+
+      return Math.round(
+        (fim.getTime() - inicio.getTime()) / 86_400_000,
+      );
+    }
+
+    let pagar = 0;
+    let receber = 0;
+
+    try {
+      const dados = JSON.parse(
+        localStorage.getItem(CHAVE_CONTAS_PAGAR) || "[]",
+      );
+
+      if (Array.isArray(dados)) {
+        pagar = dados.filter((conta) => {
+          if (!conta || conta.situacao === "Pago") return false;
+          return diasAteLocal(String(conta.vencimento || "")) <= 2;
+        }).length;
+      }
+    } catch {
+      pagar = 0;
+    }
+
+    try {
+      const dados = JSON.parse(
+        localStorage.getItem(CHAVE_CONTAS_RECEBER) || "[]",
+      );
+
+      if (Array.isArray(dados)) {
+        receber = dados.filter((conta) => {
+          if (!conta || conta.situacao === "Recebido") return false;
+          return diasAteLocal(String(conta.vencimento || "")) <= 2;
+        }).length;
+      }
+    } catch {
+      receber = 0;
+    }
+
+    return {
+      pagar,
+      receber,
+      total: pagar + receber,
+    };
+  }, [versaoLembretes]);
 
   const lancamentosFiltrados = useMemo(() => {
     return [...lancamentos]
@@ -752,37 +829,52 @@ function restaurarBackupFinanceiro(
         </p>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-yellow-400/30 bg-black p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-black uppercase text-yellow-400">
-              🎙️ Comando de voz CHOQUESEG
-            </p>
-            <p className="mt-1 text-sm text-zinc-400">
-              Ex.: “CHOQUESEG, gastei 5 reais de lanche na minha conta pessoal.”
-            </p>
-            {textoVoz && (
-              <p className="mt-2 text-xs text-zinc-500">
-                Último comando: {textoVoz}
-              </p>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={iniciarComandoVoz}
-            disabled={ouvindoVoz}
-            className="min-h-12 rounded-xl bg-yellow-400 px-5 py-3 font-black uppercase text-black disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {ouvindoVoz ? "🎙️ Ouvindo..." : "🎤 Falar gasto"}
-          </button>
-        </div>
+      <div className="mt-5">
+        <CentralVozFinanceiro usuarioNome={usuarioNome} />
       </div>
 
       {mensagem && (
         <div className="mt-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">
           {mensagem}
         </div>
+      )}
+
+      {lembretesFinanceiros.total > 0 && (
+        <section className="mt-5 rounded-2xl border border-orange-400/50 bg-orange-400/10 p-4">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-black uppercase text-orange-300">
+                ⏰ Lembretes financeiros
+              </p>
+              <p className="mt-1 text-sm font-bold text-white">
+                Você tem {lembretesFinanceiros.total} compromisso(s) financeiro(s)
+                vencido(s) ou com vencimento nos próximos 2 dias.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {lembretesFinanceiros.pagar > 0 && (
+                <button
+                  type="button"
+                  onClick={() => abrirSecaoFinanceiro("pagar")}
+                  className="rounded-xl border border-red-400/60 px-4 py-2 text-sm font-black uppercase text-red-300"
+                >
+                  A pagar: {lembretesFinanceiros.pagar}
+                </button>
+              )}
+
+              {lembretesFinanceiros.receber > 0 && (
+                <button
+                  type="button"
+                  onClick={() => abrirSecaoFinanceiro("receber")}
+                  className="rounded-xl border border-emerald-400/60 px-4 py-2 text-sm font-black uppercase text-emerald-300"
+                >
+                  A receber: {lembretesFinanceiros.receber}
+                </button>
+              )}
+            </div>
+          </div>
+        </section>
       )}
 
       <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
@@ -1132,6 +1224,16 @@ function restaurarBackupFinanceiro(
       </div>
     </section>
   );
+}
+
+
+function hojeLocalISO() {
+  const agora = new Date();
+  const local = new Date(
+    agora.getTime() - agora.getTimezoneOffset() * 60_000,
+  );
+
+  return local.toISOString().slice(0, 10);
 }
 
 function CardResumo({
