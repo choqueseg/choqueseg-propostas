@@ -9,7 +9,7 @@ import {
   inversoresPadrao,
   microinversoresPadrao,
   modulosPadrao,
-} from "./equipamentos";
+} from "../equipamentos";
 type KitSolar = {
   id: string;
   nome: string;

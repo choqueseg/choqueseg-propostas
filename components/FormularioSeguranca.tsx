@@ -955,6 +955,8 @@ export default function FormularioSeguranca() {
     totalCartao: pagamentoCartao.totalCartao,
     parcelaCartao: pagamentoCartao.valorParcela,
     temaPDF,
+    enderecoEmpresa:
+      "Rodovia dos Náufragos, Robalo, 710 · Aracaju - SE",
   };
 
   function limparFormulario() {
