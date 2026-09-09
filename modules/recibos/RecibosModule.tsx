@@ -10,7 +10,6 @@ type ClienteBanco = {
   cidade: string | null;
   endereco: string | null;
   tipo_servico: string | null;
-  cpf_cnpj?: string | null;
 };
 
 type DadosEmpresa = {
@@ -31,9 +30,6 @@ type Recibo = {
   clienteId?: string;
   clienteNome: string;
   clienteTelefone?: string;
-  clienteCpfCnpj?: string;
-  clienteCidade?: string;
-  clienteEndereco?: string;
   valor: number;
   referenteA: string;
   formaPagamento: string;
@@ -80,10 +76,6 @@ export default function RecibosModule() {
   const [clienteId, setClienteId] = useState("");
   const [clienteNome, setClienteNome] = useState("");
   const [clienteTelefone, setClienteTelefone] = useState("");
-  const [clienteCpfCnpj, setClienteCpfCnpj] = useState("");
-  const [clienteCidade, setClienteCidade] = useState("");
-  const [clienteEndereco, setClienteEndereco] = useState("");
-  const [salvarClienteNovo, setSalvarClienteNovo] = useState(false);
   const [clienteManual, setClienteManual] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState("");
 
@@ -95,7 +87,6 @@ export default function RecibosModule() {
   const [mensagem, setMensagem] = useState("");
 
   const [buscaHistorico, setBuscaHistorico] = useState("");
-  const [reciboExpandidoId, setReciboExpandidoId] = useState<string | null>(null);
   const [filtroStatus, setFiltroStatus] =
     useState<"Todos" | StatusRecibo>("Todos");
 
@@ -104,7 +95,7 @@ export default function RecibosModule() {
       try {
         const { data, error } = await supabase
           .from("clientes")
-          .select("id,nome,telefone,cidade,endereco,tipo_servico,cpf_cnpj")
+          .select("id,nome,telefone,cidade,endereco,tipo_servico")
           .order("nome", { ascending: true });
 
         if (error) throw error;
@@ -202,9 +193,6 @@ export default function RecibosModule() {
     setClienteId(cliente.id);
     setClienteNome(cliente.nome);
     setClienteTelefone(cliente.telefone ?? "");
-    setClienteCpfCnpj(cliente.cpf_cnpj ?? "");
-    setClienteCidade(cliente.cidade ?? "");
-    setClienteEndereco(cliente.endereco ?? "");
     setBuscaCliente(cliente.nome);
     setClienteManual(false);
 
@@ -218,10 +206,6 @@ export default function RecibosModule() {
     setClienteId("");
     setClienteNome("");
     setClienteTelefone("");
-    setClienteCpfCnpj("");
-    setClienteCidade("");
-    setClienteEndereco("");
-    setSalvarClienteNovo(false);
     setBuscaCliente("");
   }
 
@@ -244,7 +228,54 @@ export default function RecibosModule() {
     return `REC-${ano}-${String(proximo).padStart(4, "0")}`;
   }
 
-  async function salvarRecibo(evento: FormEvent<HTMLFormElement>) {
+  function montarReciboParaPrevia(): Recibo | null {
+    const valorNumerico = converterValor(valor);
+
+    if (!clienteNome.trim()) {
+      setMensagem("Informe ou selecione o cliente.");
+      return null;
+    }
+
+    if (!valorNumerico || valorNumerico <= 0) {
+      setMensagem("Informe um valor válido.");
+      return null;
+    }
+
+    if (!referenteA.trim()) {
+      setMensagem("Informe a que se refere o pagamento.");
+      return null;
+    }
+
+    if (!data) {
+      setMensagem("Informe a data do recebimento.");
+      return null;
+    }
+
+    setMensagem("");
+
+    return {
+      id: `previa-${Date.now()}`,
+      numero: proximoNumeroRecibo(),
+      clienteId: clienteId || undefined,
+      clienteNome: clienteNome.trim(),
+      clienteTelefone: clienteTelefone.trim() || undefined,
+      valor: valorNumerico,
+      referenteA: referenteA.trim(),
+      formaPagamento,
+      data,
+      observacao: observacao.trim() || undefined,
+      status: "Emitido",
+      criadoEm: new Date().toISOString(),
+    };
+  }
+
+  function visualizarReciboAntesDeEmitir() {
+    const previa = montarReciboParaPrevia();
+    if (!previa) return;
+    abrirRecibo(previa, true);
+  }
+
+  function salvarRecibo(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     setMensagem("");
 
@@ -270,53 +301,12 @@ export default function RecibosModule() {
       return;
     }
 
-    let clienteVinculadoId = clienteId;
-
-    if (clienteManual && salvarClienteNovo && !clienteVinculadoId) {
-      const novoClienteId = crypto.randomUUID();
-      const { error: erroCliente } = await supabase.from("clientes").insert({
-        id: novoClienteId,
-        nome: clienteNome.trim(),
-        telefone: clienteTelefone.trim() || null,
-        cpf_cnpj: clienteCpfCnpj.trim() || null,
-        cidade: clienteCidade.trim() || null,
-        endereco: clienteEndereco.trim() || null,
-        tipo_servico: null,
-        origem: "Recibo",
-        observacoes: "Cliente cadastrado a partir do módulo de Recibos.",
-        status: "Novo Cliente",
-        criado_em: new Date().toISOString(),
-        retorno_em: null,
-      });
-
-      if (erroCliente) {
-        setMensagem(`Não foi possível cadastrar o cliente: ${erroCliente.message}`);
-        return;
-      }
-
-      clienteVinculadoId = novoClienteId;
-      setClientes((atuais) =>
-        [...atuais, {
-          id: novoClienteId,
-          nome: clienteNome.trim(),
-          telefone: clienteTelefone.trim() || null,
-          cpf_cnpj: clienteCpfCnpj.trim() || null,
-          cidade: clienteCidade.trim() || null,
-          endereco: clienteEndereco.trim() || null,
-          tipo_servico: null,
-        }].sort((a, b) => a.nome.localeCompare(b.nome)),
-      );
-    }
-
     const novoRecibo: Recibo = {
       id: crypto.randomUUID(),
       numero: proximoNumeroRecibo(),
-      clienteId: clienteVinculadoId || undefined,
+      clienteId: clienteId || undefined,
       clienteNome: clienteNome.trim(),
       clienteTelefone: clienteTelefone.trim() || undefined,
-      clienteCpfCnpj: clienteCpfCnpj.trim() || undefined,
-      clienteCidade: clienteCidade.trim() || undefined,
-      clienteEndereco: clienteEndereco.trim() || undefined,
       valor: valorNumerico,
       referenteA: referenteA.trim(),
       formaPagamento,
@@ -344,10 +334,6 @@ export default function RecibosModule() {
     setClienteId("");
     setClienteNome("");
     setClienteTelefone("");
-    setClienteCpfCnpj("");
-    setClienteCidade("");
-    setClienteEndereco("");
-    setSalvarClienteNovo(false);
     setBuscaCliente("");
     setClienteManual(false);
     setValor("");
@@ -429,7 +415,7 @@ export default function RecibosModule() {
     );
   }
 
-  function abrirRecibo(recibo: Recibo) {
+  function abrirRecibo(recibo: Recibo, modoPrevia = false) {
     const janela = window.open("", "_blank", "width=860,height=920");
 
     if (!janela) {
@@ -450,162 +436,65 @@ export default function RecibosModule() {
           <title>${recibo.numero} - ${recibo.clienteNome}</title>
           <style>
             * { box-sizing: border-box; }
-
-            :root {
-              --amarelo: #facc15;
-              --preto: #050505;
-              --cinza: #f3f4f6;
-              --cinza-borda: #d1d5db;
-              --texto: #111827;
-            }
-
             body {
               margin: 0;
-              padding: 24px;
+              padding: 28px;
               font-family: Arial, Helvetica, sans-serif;
-              background: #e5e7eb;
-              color: var(--texto);
+              background: #f3f4f6;
+              color: #111827;
             }
-
             .pagina {
-              width: min(100%, 860px);
+              max-width: 760px;
               margin: 0 auto;
               background: white;
-              border: 2px solid var(--amarelo);
-              border-radius: 24px;
+              border: 3px solid #facc15;
+              border-radius: 20px;
               overflow: hidden;
-              box-shadow: 0 18px 50px rgba(0,0,0,.16);
+              box-shadow: 0 10px 30px rgba(0,0,0,.12);
             }
-
             .topo {
-              position: relative;
-              display: grid;
-              grid-template-columns: 120px minmax(0,1fr);
+              display: flex;
+              flex-direction: column;
               align-items: center;
-              gap: 22px;
-              min-height: 155px;
-              padding: 22px 28px;
-              background:
-                radial-gradient(circle at 82% 18%, rgba(250,204,21,.30), transparent 24%),
-                linear-gradient(135deg, #050505 0%, #0b0b0b 68%, #111827 100%);
+              justify-content: center;
+              gap: 8px;
+              padding: 20px 26px 18px;
+              background: #050505;
               color: white;
-              border-bottom: 6px solid var(--amarelo);
+              border-bottom: 5px solid #facc15;
+              text-align: center;
             }
-
-            .topo::after {
-              content: "";
-              position: absolute;
-              inset: 0;
-              pointer-events: none;
-              opacity: .10;
-              background:
-                repeating-linear-gradient(
-                  -16deg,
-                  transparent 0 30px,
-                  rgba(250,204,21,.25) 31px 32px
-                );
-            }
-
             .logo {
-              position: relative;
-              z-index: 1;
-              width: 112px;
-              height: 112px;
+              width: 88px;
+              height: 88px;
               object-fit: contain;
+              display: block;
+              margin: 0 auto;
             }
-
-            .marca {
-              position: relative;
-              z-index: 1;
-            }
-
             .empresa {
-              color: var(--amarelo);
-              font-size: 34px;
-              line-height: 1;
-              font-weight: 1000;
-              letter-spacing: .8px;
-            }
-
-            .subtitulo {
-              margin-top: 7px;
-              font-size: 15px;
-              font-weight: 800;
-            }
-
-            .slogan {
-              margin-top: 12px;
-              color: #d1d5db;
-              font-size: 12px;
-              font-weight: 700;
-              text-transform: uppercase;
+              font-size: 30px;
+              font-weight: 900;
+              color: #facc15;
               letter-spacing: .6px;
+              line-height: 1;
+              text-align: center;
             }
-
-            .conteudo {
-              padding: 28px;
-            }
-
-            .titulo-area {
-              display: grid;
-              grid-template-columns: minmax(0,1fr) 220px;
-              align-items: start;
-              gap: 20px;
-              margin-bottom: 22px;
-            }
-
+            .conteudo { padding: 30px; }
             .titulo {
               margin: 0;
-              font-size: 38px;
-              line-height: 1;
-              font-weight: 1000;
-              text-transform: uppercase;
+              text-align: center;
+              font-size: 32px;
+              font-weight: 900;
             }
-
-            .titulo strong {
-              color: var(--amarelo);
-            }
-
-            .subtitulo-doc {
-              margin-top: 8px;
-              color: #4b5563;
+            .numero {
+              margin-top: 7px;
+              text-align: center;
+              color: #6b7280;
               font-size: 13px;
               font-weight: 800;
-              text-transform: uppercase;
-              letter-spacing: .5px;
             }
-
-            .numero-box {
-              border-radius: 18px;
-              background: linear-gradient(180deg, #f9fafb, #e5e7eb);
-              padding: 15px 16px;
-              text-align: center;
-              border: 1px solid #d1d5db;
-            }
-
-            .numero-box small {
-              display: block;
-              color: #4b5563;
-              font-size: 10px;
-              font-weight: 900;
-              text-transform: uppercase;
-            }
-
-            .numero-box strong {
-              display: block;
-              margin-top: 4px;
-              font-size: 18px;
-              font-weight: 1000;
-            }
-
-            .numero-box .data {
-              margin-top: 10px;
-              padding-top: 10px;
-              border-top: 1px solid #d1d5db;
-            }
-
             .cancelado {
-              margin: 0 0 18px;
+              margin: 20px 0;
               border: 2px solid #ef4444;
               background: #fef2f2;
               color: #b91c1c;
@@ -614,301 +503,123 @@ export default function RecibosModule() {
               text-align: center;
               font-weight: 900;
             }
-
-            .secao {
-              position: relative;
-              margin-top: 16px;
-              border: 1px solid #9ca3af;
+            .valor {
+              margin: 24px 0;
               border-radius: 16px;
-              padding: 24px 18px 16px;
-              background: linear-gradient(180deg, #ffffff, #fafafa);
-            }
-
-            .secao-titulo {
-              position: absolute;
-              top: -13px;
-              left: 16px;
-              display: inline-flex;
-              align-items: center;
-              gap: 7px;
-              min-width: 210px;
-              padding: 7px 14px;
-              border-radius: 10px 10px 10px 0;
-              background: var(--amarelo);
+              background: #facc15;
+              padding: 20px;
+              text-align: center;
               color: #050505;
-              font-size: 14px;
-              font-weight: 1000;
+            }
+            .valor small {
+              display: block;
+              font-size: 12px;
+              font-weight: 900;
               text-transform: uppercase;
             }
-
-            .grid-empresa {
+            .valor strong {
+              display: block;
+              margin-top: 5px;
+              font-size: 38px;
+            }
+            .linha {
               display: grid;
-              grid-template-columns: minmax(0,1.4fr) minmax(220px,.8fr);
-              gap: 18px;
-              align-items: center;
-            }
-
-            .empresa-dados strong {
-              font-size: 17px;
-            }
-
-            .empresa-dados p,
-            .contatos p {
-              margin: 5px 0;
-              font-size: 13px;
+              grid-template-columns: 155px minmax(0,1fr);
+              gap: 10px;
+              padding: 11px 0;
+              border-bottom: 1px solid #e5e7eb;
+              font-size: 15px;
               line-height: 1.45;
             }
-
-            .contatos {
-              border-left: 1px solid #d1d5db;
-              padding-left: 18px;
-            }
-
-            .linha-dado {
-              display: grid;
-              grid-template-columns: 135px minmax(0,1fr);
-              gap: 12px;
-              padding: 9px 0;
-              border-bottom: 1px solid #e5e7eb;
-              font-size: 14px;
-            }
-
-            .linha-dado:last-child {
-              border-bottom: 0;
-            }
-
-            .linha-dado strong {
-              font-weight: 900;
-            }
-
-            .pagamento-grid {
-              display: grid;
-              grid-template-columns: minmax(0,1fr) 280px;
-              gap: 18px;
-              align-items: stretch;
-            }
-
-            .valor-box {
-              display: flex;
-              min-height: 150px;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              border-radius: 18px;
-              background: linear-gradient(135deg, #fde047, #facc15);
-              color: #050505;
-              text-align: center;
-              padding: 18px;
-              box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
-            }
-
-            .valor-box small {
-              display: block;
-              font-size: 11px;
-              font-weight: 1000;
-              text-transform: uppercase;
-            }
-
-            .valor-box strong {
-              display: block;
-              margin-top: 7px;
-              font-size: 40px;
-              line-height: 1;
-              font-weight: 1000;
-            }
-
+            .linha strong { font-weight: 900; }
             .declaracao {
-              margin-top: 18px;
-              border-radius: 16px;
-              background: #f3f4f6;
-              padding: 18px 20px;
-              font-size: 15px;
+              margin: 24px 0 0;
+              font-size: 17px;
               line-height: 1.65;
             }
-
-            .assinatura {
-              margin: 34px auto 10px;
-              max-width: 420px;
-              text-align: center;
+            .rodape {
+              margin-top: 30px;
+              border-top: 2px solid #111827;
+              padding-top: 18px;
+              font-size: 13px;
+              line-height: 1.65;
             }
-
-            .assinatura .linha {
-              margin: 0 auto 8px;
-              width: 100%;
-              border-top: 1px solid #111827;
+            .rodape strong {
+              font-size: 15px;
             }
-
-            .assinatura strong {
-              display: block;
-              font-size: 14px;
-            }
-
-            .assinatura span {
-              display: block;
-              margin-top: 4px;
-              color: #4b5563;
-              font-size: 12px;
-            }
-
-            .rodape-servicos {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 0;
-              background: #050505;
-              border-top: 6px solid var(--amarelo);
-              color: white;
-            }
-
-            .servico {
-              min-height: 92px;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              gap: 7px;
-              padding: 14px 8px;
-              text-align: center;
-              border-right: 1px solid #374151;
-              font-size: 11px;
-              font-weight: 900;
-              text-transform: uppercase;
-            }
-
-            .servico:last-child {
-              border-right: 0;
-            }
-
-            .servico .icone {
-              color: var(--amarelo);
-              font-size: 26px;
-            }
-
-            .faixa-final {
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 16px;
-              padding: 12px 22px;
-              background: #050505;
-              color: white;
-              border-top: 1px solid #374151;
-              font-size: 11px;
-              font-weight: 800;
-            }
-
-            .faixa-final strong {
-              color: var(--amarelo);
-              text-transform: uppercase;
-            }
-
             .acoes {
-              width: min(100%, 860px);
+              max-width: 760px;
               margin: 16px auto;
               display: flex;
               justify-content: center;
               gap: 10px;
             }
-
-            button {
+            button, .botao-link {
               border: 0;
               border-radius: 11px;
               padding: 13px 18px;
-              background: var(--amarelo);
+              background: #facc15;
               color: #050505;
               font-weight: 900;
               cursor: pointer;
+              text-decoration: none;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
             }
-
-            @media (max-width: 680px) {
-              body { padding: 8px; }
-              .pagina { border-radius: 16px; }
-              .topo {
-                grid-template-columns: 84px minmax(0,1fr);
-                min-height: 118px;
-                padding: 16px;
-              }
-              .logo { width: 78px; height: 78px; }
-              .empresa { font-size: 24px; }
-              .subtitulo { font-size: 12px; }
-              .slogan { display: none; }
-              .conteudo { padding: 18px; }
-              .titulo-area { grid-template-columns: 1fr; }
-              .titulo { font-size: 28px; }
-              .numero-box { text-align: left; }
-              .grid-empresa,
-              .pagamento-grid { grid-template-columns: 1fr; }
-              .contatos {
-                border-left: 0;
-                border-top: 1px solid #d1d5db;
-                padding-left: 0;
-                padding-top: 12px;
-              }
-              .linha-dado {
-                grid-template-columns: 1fr;
-                gap: 3px;
-              }
-              .rodape-servicos {
-                grid-template-columns: repeat(2, 1fr);
-              }
-              .servico:nth-child(2) { border-right: 0; }
-              .servico:nth-child(-n+2) { border-bottom: 1px solid #374151; }
-              .faixa-final {
-                flex-direction: column;
-                align-items: flex-start;
-              }
+            .whatsapp {
+              background: #16a34a;
+              color: #fff;
             }
-
+            .voltar {
+              background: #111827;
+              color: #fff;
+            }
+            .aviso-previa {
+              max-width: 760px;
+              margin: 16px auto 0;
+              border: 1px solid #facc15;
+              background: #fffbeb;
+              color: #713f12;
+              padding: 10px 14px;
+              border-radius: 10px;
+              font-size: 12px;
+              font-weight: 800;
+              text-align: center;
+            }
+            @media (max-width: 640px) {
+              body { padding: 10px; }
+              .conteudo { padding: 20px; }
+              .topo { padding: 16px; }
+              .logo { width: 72px; height: 72px; }
+              .empresa { font-size: 25px; }
+              .titulo { font-size: 27px; }
+              .linha { grid-template-columns: 1fr; gap: 3px; }
+            }
             @media print {
-              @page {
-                size: A4;
-                margin: 8mm;
-              }
-
-              body {
-                background: white;
-                padding: 0;
-              }
-
+              body { background: white; padding: 0; }
+              .acoes { display: none !important; }
               .pagina {
-                width: 100%;
                 box-shadow: none;
                 border-radius: 0;
-              }
-
-              .acoes {
-                display: none !important;
               }
             }
           </style>
         </head>
-
         <body>
           <div class="pagina">
-            <header class="topo">
-              <img src="${escaparHtml(empresa.logo)}" class="logo" alt="CHOQUESEG" />
-              <div class="marca">
-                <div class="empresa">${escaparHtml(empresa.nome)}</div>
-                <div class="subtitulo">${escaparHtml(empresa.subtitulo)}</div>
-                <div class="slogan">Segurança, conforto, economia e tecnologia para o seu patrimônio</div>
-              </div>
-            </header>
+            <div class="topo">
+              <img
+                src="/imagens/logo/brasao-choqueseg.png"
+                class="logo"
+                alt="Brasão oficial da CHOQUESEG"
+              />
+              <div class="empresa">${escaparHtml(empresa.nome)}</div>
+            </div>
 
-            <main class="conteudo">
-              <div class="titulo-area">
-                <div>
-                  <h1 class="titulo">RECIBO <strong>DE PAGAMENTO</strong></h1>
-                  <p class="subtitulo-doc">Comprovante oficial CHOQUESEG</p>
-                </div>
-
-                <div class="numero-box">
-                  <small>Nº do recibo</small>
-                  <strong>${escaparHtml(recibo.numero)}</strong>
-                  <div class="data">
-                    <small>Data de emissão</small>
-                    <strong>${formatarData(recibo.data)}</strong>
-                  </div>
-                </div>
-              </div>
+            <div class="conteudo">
+              <h1 class="titulo">RECIBO DE PAGAMENTO</h1>
+              <div class="numero">${escaparHtml(recibo.numero)}</div>
 
               ${
                 statusCancelado
@@ -918,130 +629,71 @@ export default function RecibosModule() {
                   : ""
               }
 
-              <section class="secao">
-                <div class="secao-titulo">🏢 Dados da empresa</div>
-
-                <div class="grid-empresa">
-                  <div class="empresa-dados">
-                    <strong>${escaparHtml(empresa.nome)} – ${escaparHtml(empresa.subtitulo)}</strong>
-                    <p>CNPJ: ${escaparHtml(empresa.cnpj)}</p>
-                    <p>${escaparHtml(empresa.endereco)}</p>
-                  </div>
-
-                  <div class="contatos">
-                    <p>📞 ${escaparHtml(empresa.telefone)}</p>
-                    <p>◎ ${escaparHtml(empresa.instagram)}</p>
-                    <p>✓ Credenciado Intelbras</p>
-                  </div>
-                </div>
-              </section>
-
-              <section class="secao">
-                <div class="secao-titulo">👤 Dados do cliente</div>
-
-                <div class="linha-dado">
-                  <strong>Nome</strong>
-                  <span>${escaparHtml(recibo.clienteNome)}</span>
-                </div>
-
-                ${
-                  recibo.clienteCpfCnpj
-                    ? `<div class="linha-dado"><strong>CPF / CNPJ</strong><span>${escaparHtml(recibo.clienteCpfCnpj)}</span></div>`
-                    : ""
-                }
-
-                ${
-                  recibo.clienteTelefone
-                    ? `<div class="linha-dado"><strong>Telefone</strong><span>${escaparHtml(recibo.clienteTelefone)}</span></div>`
-                    : ""
-                }
-
-                ${
-                  recibo.clienteEndereco || recibo.clienteCidade
-                    ? `<div class="linha-dado"><strong>Endereço</strong><span>${escaparHtml(
-                        [recibo.clienteEndereco, recibo.clienteCidade].filter(Boolean).join(" - "),
-                      )}</span></div>`
-                    : ""
-                }
-              </section>
-
-              <section class="secao">
-                <div class="secao-titulo">💳 Dados do pagamento</div>
-
-                <div class="pagamento-grid">
-                  <div>
-                    <div class="linha-dado">
-                      <strong>Referente a</strong>
-                      <span>${escaparHtml(recibo.referenteA)}</span>
-                    </div>
-
-                    <div class="linha-dado">
-                      <strong>Forma</strong>
-                      <span>${escaparHtml(recibo.formaPagamento)}</span>
-                    </div>
-
-                    <div class="linha-dado">
-                      <strong>Data</strong>
-                      <span>${formatarData(recibo.data)}</span>
-                    </div>
-
-                    ${
-                      recibo.observacao
-                        ? `<div class="linha-dado"><strong>Observação</strong><span>${escaparHtml(recibo.observacao)}</span></div>`
-                        : ""
-                    }
-                  </div>
-
-                  <div class="valor-box">
-                    <small>Valor recebido</small>
-                    <strong>${formatarMoeda(recibo.valor)}</strong>
-                  </div>
-                </div>
-              </section>
-
-              <div class="declaracao">
-                Recebemos de <strong>${escaparHtml(recibo.clienteNome)}</strong>
-                a importância de <strong>${formatarMoeda(recibo.valor)}</strong>,
-                referente a <strong>${escaparHtml(recibo.referenteA)}</strong>,
-                conforme descrito neste recibo.
+              <div class="valor">
+                <small>Valor recebido</small>
+                <strong>${formatarMoeda(recibo.valor)}</strong>
               </div>
 
-              <div class="assinatura">
-                <div class="linha"></div>
-                <strong>${escaparHtml(empresa.nome)}</strong>
-                <span>${escaparHtml(empresa.subtitulo)} · CNPJ ${escaparHtml(empresa.cnpj)}</span>
-              </div>
-            </main>
+              <div class="linha"><strong>Cliente</strong><span>${escaparHtml(
+                recibo.clienteNome,
+              )}</span></div>
+              <div class="linha"><strong>Referente a</strong><span>${escaparHtml(
+                recibo.referenteA,
+              )}</span></div>
+              <div class="linha"><strong>Forma de pagamento</strong><span>${escaparHtml(
+                recibo.formaPagamento,
+              )}</span></div>
+              <div class="linha"><strong>Data</strong><span>${formatarData(
+                recibo.data,
+              )}</span></div>
+              ${
+                recibo.observacao
+                  ? `<div class="linha"><strong>Observação</strong><span>${escaparHtml(
+                      recibo.observacao,
+                    )}</span></div>`
+                  : ""
+              }
 
-            <footer>
-              <div class="rodape-servicos">
-                <div class="servico">
-                  <span class="icone">☀</span>
-                  <span>Energia Solar</span>
-                </div>
-                <div class="servico">
-                  <span class="icone">📹</span>
-                  <span>Segurança Eletrônica</span>
-                </div>
-                <div class="servico">
-                  <span class="icone">⚡</span>
-                  <span>Elétrica Residencial</span>
-                </div>
-                <div class="servico">
-                  <span class="icone">⌂</span>
-                  <span>Casa Inteligente</span>
-                </div>
-              </div>
+              <p class="declaracao">
+                Declaramos, para os devidos fins, que recebemos de
+                <strong>${escaparHtml(recibo.clienteNome)}</strong> a importância de
+                <strong>${formatarMoeda(recibo.valor)}</strong>, referente a
+                <strong>${escaparHtml(recibo.referenteA)}</strong>.
+              </p>
 
-              <div class="faixa-final">
-                <strong>Tecnologia que valoriza o seu patrimônio</strong>
-                <span>Obrigado pela confiança!</span>
+              <div class="rodape">
+                <strong>${escaparHtml(empresa.nome)} ${escaparHtml(
+                  empresa.subtitulo,
+                )}</strong><br />
+                CNPJ: ${escaparHtml(empresa.cnpj)}<br />
+                Telefone: ${escaparHtml(empresa.telefone)} &nbsp; | &nbsp;
+                Instagram: ${escaparHtml(empresa.instagram)}<br />
+                Endereço: ${escaparHtml(empresa.endereco)}
               </div>
-            </footer>
+            </div>
           </div>
 
+          ${
+            modoPrevia
+              ? `<div class="aviso-previa">PRÉVIA DO RECIBO — confira os dados antes de emitir ou enviar.</div>`
+              : ""
+          }
+
           <div class="acoes">
-            <button onclick="window.print()">Imprimir / Salvar PDF</button>
+            <button onclick="window.print()">🧾 Imprimir / Salvar PDF</button>
+            ${
+              recibo.clienteTelefone
+                ? `<a
+                    class="botao-link whatsapp"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    href="https://wa.me/${String(recibo.clienteTelefone).replace(/\D/g, "").startsWith("55") ? String(recibo.clienteTelefone).replace(/\D/g, "") : `55${String(recibo.clienteTelefone).replace(/\D/g, "")}`}?text=${encodeURIComponent(
+                      `Olá, ${recibo.clienteNome}. Segue o recibo referente a ${recibo.referenteA}, no valor de ${formatarMoeda(recibo.valor)}. Recibo ${recibo.numero}.`,
+                    )}"
+                  >📲 Enviar pelo WhatsApp</a>`
+                : ""
+            }
+            <button class="voltar" onclick="window.close()">← Voltar e editar</button>
           </div>
         </body>
       </html>
@@ -1173,13 +825,7 @@ export default function RecibosModule() {
                     </p>
                     <p className="mt-1 text-sm text-zinc-400">
                       {clienteTelefone || "Telefone não cadastrado"}
-                      {clienteCpfCnpj ? ` · ${clienteCpfCnpj}` : ""}
                     </p>
-                    {(clienteEndereco || clienteCidade) && (
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {[clienteEndereco, clienteCidade].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
@@ -1200,35 +846,6 @@ export default function RecibosModule() {
                     onChange={setClienteTelefone}
                     placeholder="Ex.: 79999999999"
                   />
-                  <CampoTexto
-                    label="CPF / CNPJ"
-                    valor={clienteCpfCnpj}
-                    onChange={setClienteCpfCnpj}
-                    placeholder="Opcional"
-                  />
-                  <CampoTexto
-                    label="Cidade"
-                    valor={clienteCidade}
-                    onChange={setClienteCidade}
-                    placeholder="Cidade"
-                  />
-                  <div className="md:col-span-2 xl:col-span-2">
-                    <CampoTexto
-                      label="Endereço"
-                      valor={clienteEndereco}
-                      onChange={setClienteEndereco}
-                      placeholder="Rua, número, bairro"
-                    />
-                  </div>
-                  <label className="flex items-center gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/5 px-4 py-3 text-sm font-bold text-zinc-200 md:col-span-2 xl:col-span-2">
-                    <input
-                      type="checkbox"
-                      checked={salvarClienteNovo}
-                      onChange={(evento) => setSalvarClienteNovo(evento.target.checked)}
-                      className="h-4 w-4 accent-yellow-400"
-                    />
-                    Salvar este cliente no cadastro da CHOQUESEG
-                  </label>
                 </>
               )}
 
@@ -1282,10 +899,18 @@ export default function RecibosModule() {
 
             <div className="mt-5 flex flex-wrap gap-3">
               <button
+                type="button"
+                onClick={visualizarReciboAntesDeEmitir}
+                className="rounded-xl border border-blue-500 bg-blue-500/10 px-6 py-3 font-black uppercase text-blue-400"
+              >
+                👁️ Visualizar recibo
+              </button>
+
+              <button
                 type="submit"
                 className="rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black"
               >
-                Gerar recibo
+                Emitir recibo
               </button>
               <button
                 type="button"
@@ -1333,74 +958,84 @@ export default function RecibosModule() {
                     Nenhum recibo encontrado.
                   </div>
                 ) : (
-                  recibosFiltrados.map((recibo) => {
-                    const expandido = reciboExpandidoId === recibo.id;
-                    return (
-                      <article
-                        key={recibo.id}
-                        className="rounded-2xl border border-zinc-800 bg-zinc-950"
-                      >
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setReciboExpandidoId((atual) =>
-                              atual === recibo.id ? null : recibo.id,
-                            )
-                          }
-                          className="flex w-full min-w-0 items-center justify-between gap-3 p-4 text-left"
-                        >
-                          <div className="min-w-0">
-                            <h4 className="truncate text-base font-black uppercase text-white">
-                              {recibo.clienteNome}
-                            </h4>
-                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                              <span className="font-black text-yellow-400">
-                                {formatarMoeda(recibo.valor)}
-                              </span>
-                              <span className="text-zinc-500">{formatarData(recibo.data)}</span>
-                              <span className={recibo.status === "Emitido" ? "font-black text-emerald-400" : "font-black text-red-400"}>
-                                {recibo.status}
-                              </span>
-                              <span className="text-zinc-500">{recibo.numero}</span>
-                            </div>
+                  recibosFiltrados.map((recibo) => (
+                    <article
+                      key={recibo.id}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4"
+                    >
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-lg bg-yellow-400/10 px-3 py-1 text-xs font-black text-yellow-300">
+                              {recibo.numero}
+                            </span>
+                            <span
+                              className={`rounded-lg px-3 py-1 text-xs font-black uppercase ${
+                                recibo.status === "Emitido"
+                                  ? "bg-emerald-500/15 text-emerald-400"
+                                  : "bg-red-500/15 text-red-400"
+                              }`}
+                            >
+                              {recibo.status}
+                            </span>
                           </div>
-                          <span className="shrink-0 rounded-xl border border-zinc-700 px-3 py-2 text-sm font-black text-zinc-300">
-                            {expandido ? "▲" : "▼"}
-                          </span>
-                        </button>
 
-                        {expandido && (
-                          <div className="border-t border-zinc-800 p-4">
-                            <p className="text-sm text-zinc-300">{recibo.referenteA}</p>
-                            <p className="mt-2 text-sm text-zinc-500">
-                              {recibo.formaPagamento}
-                              {recibo.clienteTelefone ? ` · ${recibo.clienteTelefone}` : ""}
-                            </p>
-                            {recibo.status === "Cancelado" && recibo.motivoCancelamento && (
-                              <p className="mt-2 text-sm font-bold text-red-400">
+                          <h4 className="mt-3 break-words text-lg font-black text-white">
+                            {recibo.clienteNome}
+                          </h4>
+                          <p className="mt-1 break-words text-sm text-zinc-400">
+                            {recibo.referenteA}
+                          </p>
+                          <p className="mt-1 text-sm text-zinc-500">
+                            {formatarData(recibo.data)} · {recibo.formaPagamento}
+                          </p>
+
+                          {recibo.status === "Cancelado" &&
+                            recibo.motivoCancelamento && (
+                              <p className="mt-2 break-words text-sm font-bold text-red-400">
                                 Motivo: {recibo.motivoCancelamento}
                               </p>
                             )}
-                            <div className="mt-4 flex flex-wrap gap-2">
-                              <button type="button" onClick={() => abrirRecibo(recibo)} className="rounded-xl border border-yellow-400/50 px-4 py-2 text-sm font-black uppercase text-yellow-300">
-                                Visualizar / PDF
+                        </div>
+
+                        <div className="xl:text-right">
+                          <p className="text-xl font-black text-yellow-400">
+                            {formatarMoeda(recibo.valor)}
+                          </p>
+
+                          <div className="mt-3 flex flex-wrap gap-2 xl:justify-end">
+                            <button
+                              type="button"
+                              onClick={() => abrirRecibo(recibo)}
+                              className="rounded-xl border border-yellow-400/50 px-4 py-2 text-sm font-black uppercase text-yellow-300"
+                            >
+                              Visualizar / PDF
+                            </button>
+
+                            {recibo.clienteTelefone && (
+                              <button
+                                type="button"
+                                onClick={() => abrirWhatsApp(recibo)}
+                                className="rounded-xl border border-emerald-500/50 px-4 py-2 text-sm font-black uppercase text-emerald-400"
+                              >
+                                WhatsApp
                               </button>
-                              {recibo.clienteTelefone && (
-                                <button type="button" onClick={() => abrirWhatsApp(recibo)} className="rounded-xl border border-emerald-500/50 px-4 py-2 text-sm font-black uppercase text-emerald-400">
-                                  WhatsApp
-                                </button>
-                              )}
-                              {recibo.status === "Emitido" && (
-                                <button type="button" onClick={() => cancelarRecibo(recibo)} className="rounded-xl border border-red-500/50 px-4 py-2 text-sm font-black uppercase text-red-400">
-                                  Cancelar
-                                </button>
-                              )}
-                            </div>
+                            )}
+
+                            {recibo.status === "Emitido" && (
+                              <button
+                                type="button"
+                                onClick={() => cancelarRecibo(recibo)}
+                                className="rounded-xl border border-red-500/50 px-4 py-2 text-sm font-black uppercase text-red-400"
+                              >
+                                Cancelar
+                              </button>
+                            )}
                           </div>
-                        )}
-                      </article>
-                    );
-                  })
+                        </div>
+                      </div>
+                    </article>
+                  ))
                 )}
               </div>
             </div>

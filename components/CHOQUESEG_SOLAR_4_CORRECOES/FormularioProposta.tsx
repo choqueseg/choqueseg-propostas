@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
+import { createClient } from "@/utils/supabase/client";
 import PreviewProposta, { DadosPreview, type InstalacaoPortfolio } from "./PreviewProposta";
+
+const supabase = createClient();
+const CHAVE_FOTOS_SOLAR = "choqueseg-solar-fotos-padrao";
+const CHAVE_MENSAGEM_SOLAR = "proposta-energia-solar";
 import {
   type Equipamento,
   inversoresPadrao,
   microinversoresPadrao,
   modulosPadrao,
-} from "../equipamentos";
+} from "./equipamentos";
 type KitSolar = {
   id: string;
   nome: string;
@@ -23,7 +28,22 @@ type KitSolar = {
   valor: string;
 };
 
-const kits: KitSolar[] = [
+type KitSolarEditor = KitSolar & {
+  ativo?: boolean;
+};
+
+type Cliente = {
+  id: string | number;
+  nome: string;
+  telefone?: string | null;
+  cidade?: string | null;
+  endereco?: string | null;
+  cpf_cnpj?: string | null;
+  cpf?: string | null;
+  cnpj?: string | null;
+};
+
+const KITS_PADRAO: KitSolar[] = [
   { id: "300", nome: "Kit 300 kWh", geracao: "300", potencia: "2,50 kWp", quantidadeModulos: "4", moduloId: "jinko-630", quantidadeInversores: "2", inversorId: "hoymiles-1600", tipoInversor: "Microinversor", valor: "R$ 6.999,00" },
   { id: "400", nome: "Kit 400 kWh", geracao: "400", potencia: "2,84 kWp", quantidadeModulos: "4", moduloId: "jinko-710", quantidadeInversores: "2", inversorId: "hoymiles-2000", tipoInversor: "Microinversor", valor: "R$ 8.399,00" },
   { id: "500", nome: "Kit 500 kWh", geracao: "500", potencia: "3,55 kWp", quantidadeModulos: "5", moduloId: "jinko-710", quantidadeInversores: "1", inversorId: "huawei-3", tipoInversor: "String", valor: "R$ 8.950,00" },
@@ -38,9 +58,12 @@ const kits: KitSolar[] = [
 ];
 
 type Formulario = {
+  clienteId: string;
   nome: string;
   telefone: string;
   cidade: string;
+  enderecoCliente: string;
+  cpfCnpj: string;
   consumo: string;
   valorConta: string;
   kitId: string;
@@ -66,7 +89,8 @@ type Formulario = {
 };
 
 const formularioInicial: Formulario = {
-  nome: "", telefone: "", cidade: "", consumo: "", valorConta: "", kitId: "",
+  clienteId: "", nome: "", telefone: "", cidade: "", enderecoCliente: "", cpfCnpj: "",
+  consumo: "", valorConta: "", kitId: "",
   modoSistema: "kit", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "",
   quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "",
   percentualCartao: "", parcelasCartao: "18", percentualFinanciamento: "", parcelasFinanciamento: "84",
@@ -166,33 +190,32 @@ export default function FormularioProposta() {
   const [gerandoPDFCelular, setGerandoPDFCelular] = useState(false);
   const [processandoFoto, setProcessandoFoto] = useState<number | null>(null);
   const [instalacoes, setInstalacoes] = useState<InstalacaoPortfolio[]>(instalacoesIniciais);
+  const [kitsDisponiveis, setKitsDisponiveis] = useState<KitSolar[]>(KITS_PADRAO);
+  const [gerenciarKitsAberto, setGerenciarKitsAberto] = useState(false);
+  const [salvandoKit, setSalvandoKit] = useState(false);
+  const [kitEditando, setKitEditando] = useState<KitSolarEditor | null>(null);
+  const [mensagemSolarSalva, setMensagemSolarSalva] = useState(false);
+  const [modoVisualizacaoSolar, setModoVisualizacaoSolar] = useState<
+    "dividido" | "formulario" | "pdf"
+  >("dividido");
   const [modulos, setModulos] = useState<Equipamento[]>(modulosPadrao);
   const [inversores, setInversores] = useState<Equipamento[]>(inversoresPadrao);
   const [microinversores, setMicroinversores] = useState<Equipamento[]>(microinversoresPadrao);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [carregandoClientes, setCarregandoClientes] = useState(true);
+  const [erroClientes, setErroClientes] = useState("");
+  const [escalaPreview, setEscalaPreview] = useState(1);
+  const [mensagemPadraoSolar, setMensagemPadraoSolar] = useState(
+    "Olá, {nome}! Segue sua proposta de Energia Solar da CHOQUESEG.\n\nGeração estimada: {geracao} kWh/mês.\nPotência do sistema: {potencia}.\nQuantidade de módulos: {modulos}.\nValor à vista: {valor}.\nCartão: {cartao}.\n\nTodos os detalhes estão no PDF. Fico à disposição para qualquer dúvida.\n\nEquipe CHOQUESEG"
+  );
+  const [mensagemSolarAberta, setMensagemSolarAberta] = useState(false);
+  const [salvandoMensagemSolar, setSalvandoMensagemSolar] = useState(false);
+  const [previewPdfSolarAberto, setPreviewPdfSolarAberto] = useState(false);
+  const [previewPdfSolarUrl, setPreviewPdfSolarUrl] = useState("");
+  const [previewPdfSolarBlob, setPreviewPdfSolarBlob] = useState<Blob | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewCelularRef = useRef<HTMLDivElement>(null);
-  const previewAreaRef = useRef<HTMLDivElement>(null);
-  const [previewScale, setPreviewScale] = useState(0.68);
-
-  useEffect(() => {
-    const area = previewAreaRef.current;
-    if (!area) return;
-
-    const atualizarEscala = () => {
-      const larguraDisponivel = Math.max(area.clientWidth - 16, 280);
-      setPreviewScale(Math.min(larguraDisponivel / 818, 0.96));
-    };
-
-    atualizarEscala();
-    const observador = new ResizeObserver(atualizarEscala);
-    observador.observe(area);
-    window.addEventListener("resize", atualizarEscala);
-
-    return () => {
-      observador.disconnect();
-      window.removeEventListener("resize", atualizarEscala);
-    };
-  }, []);
+  const previewAreaRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     try {
@@ -205,6 +228,60 @@ export default function FormularioProposta() {
     } catch (erro) {
       console.error("Não foi possível carregar os equipamentos:", erro);
     }
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarClientes() {
+      setCarregandoClientes(true);
+      setErroClientes("");
+
+      const { data, error } = await supabase
+        .from("clientes")
+        .select("*")
+        .order("nome", { ascending: true });
+
+      if (!ativo) return;
+
+      if (error) {
+        console.error("Erro ao carregar clientes:", error);
+        setErroClientes(`Não foi possível carregar os clientes: ${error.message}`);
+        setClientes([]);
+      } else {
+        setClientes((data ?? []) as Cliente[]);
+      }
+
+      setCarregandoClientes(false);
+    }
+
+    void carregarClientes();
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const elemento = previewAreaRef.current;
+    if (!elemento) return;
+
+    const ajustar = () => {
+      const larguraDisponivel = Math.max(elemento.clientWidth - 16, 280);
+      const novaEscala = Math.min(1, Math.max(0.32, larguraDisponivel / 794));
+      setEscalaPreview(novaEscala);
+    };
+
+    ajustar();
+
+    const observador = new ResizeObserver(ajustar);
+    observador.observe(elemento);
+    window.addEventListener("resize", ajustar);
+
+    return () => {
+      observador.disconnect();
+      window.removeEventListener("resize", ajustar);
+    };
   }, []);
 
   useEffect(() => {
@@ -228,6 +305,40 @@ export default function FormularioProposta() {
   const listaInversores = formulario.tipoInversor === "Microinversor" ? microinversores : inversores;
   const moduloSelecionado = modulos.find((item) => item.id === formulario.moduloId);
   const inversorSelecionado = listaInversores.find((item) => item.id === formulario.inversorId);
+
+  useEffect(() => {
+    const salvo = localStorage.getItem("choqueseg-solar-modo-visualizacao");
+    if (salvo === "dividido" || salvo === "formulario" || salvo === "pdf") {
+      setModoVisualizacaoSolar(salvo);
+    }
+  }, []);
+
+  function alterarModoVisualizacaoSolar(modo: "dividido" | "formulario" | "pdf") {
+    setModoVisualizacaoSolar(modo);
+    localStorage.setItem("choqueseg-solar-modo-visualizacao", modo);
+  }
+
+  useEffect(() => {
+    try {
+      const salvo = localStorage.getItem(CHAVE_FOTOS_SOLAR);
+      if (salvo) {
+        const parsed = JSON.parse(salvo) as InstalacaoPortfolio[];
+        if (Array.isArray(parsed) && parsed.length === 4) {
+          setInstalacoes(parsed);
+        }
+      }
+    } catch (erro) {
+      console.error("Erro ao restaurar fotos padrão da proposta Solar:", erro);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAVE_FOTOS_SOLAR, JSON.stringify(instalacoes));
+    } catch (erro) {
+      console.error("Erro ao salvar fotos padrão da proposta Solar:", erro);
+    }
+  }, [instalacoes]);
 
   const potenciaCalculada = useMemo(() => {
     if (formulario.modoSistema !== "personalizado") return formulario.potencia;
@@ -253,6 +364,42 @@ export default function FormularioProposta() {
     };
   }, [formulario.valorProposta, formulario.percentualCartao, formulario.parcelasCartao, formulario.percentualFinanciamento, formulario.parcelasFinanciamento]);
 
+  const estimativaSolar = useMemo(() => {
+    const consumo = Math.max(numero(formulario.consumo), 0);
+    const conta = Math.max(numero(formulario.valorConta), 0);
+    const geracao = Math.max(numero(formulario.geracao), 0);
+
+    if (!consumo || !conta || !geracao) {
+      return {
+        economiaMensal: 0,
+        economiaAnual: 0,
+        percentualEconomia: 0,
+        excedenteKwh: 0,
+        coberturaPercentual: 0,
+      };
+    }
+
+    const tarifaMedia = conta / consumo;
+    const energiaCompensada = Math.min(consumo, geracao);
+    const economiaEnergetica = energiaCompensada * tarifaMedia;
+    const limiteEconomia = conta * 0.9;
+    const economiaMensal = Math.min(economiaEnergetica, limiteEconomia);
+    const economiaAnual = economiaMensal * 12;
+    const excedenteKwh = Math.max(geracao - consumo, 0);
+    const percentualEconomia =
+      conta > 0 ? Math.min(Math.round((economiaMensal / conta) * 100), 90) : 0;
+    const coberturaPercentual =
+      consumo > 0 ? Math.round((geracao / consumo) * 100) : 0;
+
+    return {
+      economiaMensal,
+      economiaAnual,
+      percentualEconomia,
+      excedenteKwh,
+      coberturaPercentual,
+    };
+  }, [formulario.consumo, formulario.valorConta, formulario.geracao]);
+
   const validacaoEconomia = useMemo(() => {
     const consumo = numero(formulario.consumo);
     const conta = numero(formulario.valorConta);
@@ -273,6 +420,101 @@ export default function FormularioProposta() {
     return { mostrar: false, texto: "" };
   }, [formulario.consumo, formulario.valorConta, formulario.geracao]);
 
+  useEffect(() => {
+    async function carregarMensagemPadraoSolar() {
+      const { data, error } = await supabase
+        .from("mensagens_padrao")
+        .select("mensagem")
+        .eq("chave", CHAVE_MENSAGEM_SOLAR)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao carregar mensagem padrão Solar:", error);
+        return;
+      }
+
+      if (data?.mensagem) {
+        setMensagemPadraoSolar(String(data.mensagem));
+        setMensagemSolarSalva(true);
+      }
+    }
+
+    void carregarMensagemPadraoSolar();
+  }, []);
+
+  async function salvarMensagemPadraoSolar() {
+    const mensagem = mensagemPadraoSolar.trim();
+
+    if (!mensagem) {
+      alert("Digite a mensagem padrão antes de salvar.");
+      return;
+    }
+
+    setSalvandoMensagemSolar(true);
+
+    try {
+      const { error } = await supabase
+        .from("mensagens_padrao")
+        .upsert(
+          {
+            chave: CHAVE_MENSAGEM_SOLAR,
+            mensagem,
+            atualizado_em: new Date().toISOString(),
+          },
+          { onConflict: "chave" },
+        );
+
+      if (error) throw error;
+
+      setMensagemPadraoSolar(mensagem);
+      setMensagemSolarSalva(true);
+      setMensagemSolarAberta(false);
+      alert("Mensagem padrão da Energia Solar salva com sucesso.");
+    } catch (erro) {
+      console.error("Erro ao salvar mensagem padrão Solar:", erro);
+      alert(
+        erro instanceof Error
+          ? `Não foi possível salvar a mensagem: ${erro.message}`
+          : "Não foi possível salvar a mensagem padrão da Energia Solar.",
+      );
+    } finally {
+      setSalvandoMensagemSolar(false);
+    }
+  }
+
+
+  function mensagemSolarAtual() {
+    const modelo = mensagemPadraoSolar.trim();
+    if (!modelo) return montarMensagemWhatsApp();
+
+    const potenciaSistema =
+      formulario.modoSistema === "personalizado"
+        ? potenciaCalculada
+        : formulario.potencia;
+
+    const valorVista =
+      calculos.valorBase > 0
+        ? dinheiro(calculos.valorBase)
+        : formulario.valorProposta || "—";
+
+    const cartao =
+      calculos.parcelaCartao > 0
+        ? `${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}`
+        : `até ${calculos.parcelasCartao}x`;
+
+    return modelo
+      .replaceAll("{nome}", formulario.nome.trim() || "cliente")
+      .replaceAll("{consumo}", formulario.consumo || "—")
+      .replaceAll("{geracao}", formulario.geracao || "—")
+      .replaceAll("{potencia}", potenciaSistema || "—")
+      .replaceAll("{modulos}", formulario.quantidadeModulos || "—")
+      .replaceAll("{valor}", valorVista)
+      .replaceAll("{cartao}", cartao)
+      .replaceAll("{economia_mensal}", dinheiro(estimativaSolar.economiaMensal))
+      .replaceAll("{economia_percentual}", `${estimativaSolar.percentualEconomia}%`)
+      .replaceAll("{excedente}", `${Math.round(estimativaSolar.excedenteKwh)} kWh/mês`);
+  }
+
   function atualizarCampo(campo: keyof Formulario, valor: string) {
     setFormulario((anterior) => ({ ...anterior, [campo]: valor }));
     if (campo === "enderecoLoja") {
@@ -283,10 +525,50 @@ export default function FormularioProposta() {
     }
   }
 
+  function selecionarCliente(clienteId: string) {
+    const cliente = clientes.find((item) => String(item.id) === clienteId);
+
+    if (!cliente) {
+      setFormulario((anterior) => ({
+        ...anterior,
+        clienteId: "",
+        nome: "",
+        telefone: "",
+        cidade: "",
+        enderecoCliente: "",
+        cpfCnpj: "",
+      }));
+      return;
+    }
+
+    const cpfCnpj =
+      cliente.cpf_cnpj?.trim() ||
+      cliente.cpf?.trim() ||
+      cliente.cnpj?.trim() ||
+      "";
+
+    setFormulario((anterior) => ({
+      ...anterior,
+      clienteId: String(cliente.id),
+      nome: cliente.nome ?? "",
+      telefone: cliente.telefone ?? "",
+      cidade: cliente.cidade ?? "",
+      enderecoCliente: cliente.endereco ?? "",
+      cpfCnpj,
+    }));
+  }
+
   function mudarModo(modoSistema: Formulario["modoSistema"]) {
     setFormulario((anterior) => ({
       ...formularioInicial,
-      nome: anterior.nome, telefone: anterior.telefone, cidade: anterior.cidade, consumo: anterior.consumo, valorConta: anterior.valorConta,
+      clienteId: anterior.clienteId,
+      nome: anterior.nome,
+      telefone: anterior.telefone,
+      cidade: anterior.cidade,
+      enderecoCliente: anterior.enderecoCliente,
+      cpfCnpj: anterior.cpfCnpj,
+      consumo: anterior.consumo,
+      valorConta: anterior.valorConta,
       percentualCartao: anterior.percentualCartao, parcelasCartao: anterior.parcelasCartao,
       percentualFinanciamento: anterior.percentualFinanciamento, parcelasFinanciamento: anterior.parcelasFinanciamento,
       enderecoLoja: anterior.enderecoLoja,
@@ -297,8 +579,196 @@ export default function FormularioProposta() {
     }));
   }
 
+  useEffect(() => {
+    async function carregarKitsSolares() {
+      try {
+        const { data, error } = await supabase
+          .from("kits_solares")
+          .select("*")
+          .eq("ativo", true)
+          .order("geracao_kwh", { ascending: true });
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          const registros = KITS_PADRAO.map((kit) => ({
+            id: `padrao-${kit.id}`,
+            nome: kit.nome,
+            geracao_kwh: kit.geracao,
+            potencia_kwp: kit.potencia,
+            quantidade_modulos: kit.quantidadeModulos,
+            modulo_id: kit.moduloId,
+            quantidade_inversores: kit.quantidadeInversores,
+            inversor_id: kit.inversorId,
+            tipo_inversor: kit.tipoInversor,
+            valor: kit.valor,
+            ativo: true,
+          }));
+
+          const { error: erroSeed } = await supabase.from("kits_solares").insert(registros);
+          if (erroSeed) throw erroSeed;
+
+          setKitsDisponiveis(
+            KITS_PADRAO.map((kit) => ({ ...kit, id: `padrao-${kit.id}` })),
+          );
+          return;
+        }
+
+        setKitsDisponiveis(
+          data.map((item: any) => ({
+            id: String(item.id),
+            nome: String(item.nome ?? ""),
+            geracao: String(item.geracao_kwh ?? ""),
+            potencia: String(item.potencia_kwp ?? ""),
+            quantidadeModulos: String(item.quantidade_modulos ?? ""),
+            moduloId: String(item.modulo_id ?? ""),
+            quantidadeInversores: String(item.quantidade_inversores ?? "1"),
+            inversorId: String(item.inversor_id ?? ""),
+            tipoInversor:
+              item.tipo_inversor === "Microinversor" ? "Microinversor" : "String",
+            valor: String(item.valor ?? ""),
+          })),
+        );
+      } catch (erro) {
+        console.error("Erro ao carregar kits solares:", erro);
+        setKitsDisponiveis(KITS_PADRAO);
+      }
+    }
+
+    void carregarKitsSolares();
+  }, []);
+
+  function novoKitSolar() {
+    setKitEditando({
+      id: "",
+      nome: "",
+      geracao: "",
+      potencia: "",
+      quantidadeModulos: "",
+      moduloId: "",
+      quantidadeInversores: "1",
+      inversorId: "",
+      tipoInversor: "String",
+      valor: "",
+      ativo: true,
+    });
+    setGerenciarKitsAberto(true);
+  }
+
+  function editarKitSolar(kit: KitSolar) {
+    setKitEditando({ ...kit, ativo: true });
+    setGerenciarKitsAberto(true);
+  }
+
+  function duplicarKitSolar(kit: KitSolar) {
+    setKitEditando({
+      ...kit,
+      id: "",
+      nome: `${kit.nome} - cópia`,
+      ativo: true,
+    });
+    setGerenciarKitsAberto(true);
+  }
+
+  async function salvarKitSolar() {
+    if (!kitEditando) return;
+
+    if (!kitEditando.nome.trim() || !kitEditando.geracao.trim()) {
+      alert("Informe pelo menos o nome e a geração do kit.");
+      return;
+    }
+
+    setSalvandoKit(true);
+
+    try {
+      const id =
+        kitEditando.id ||
+        (typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `kit-${Date.now()}`);
+
+      const registro = {
+        id,
+        nome: kitEditando.nome.trim(),
+        geracao_kwh: kitEditando.geracao.trim(),
+        potencia_kwp: kitEditando.potencia.trim(),
+        quantidade_modulos: kitEditando.quantidadeModulos.trim(),
+        modulo_id: kitEditando.moduloId,
+        quantidade_inversores: kitEditando.quantidadeInversores.trim() || "1",
+        inversor_id: kitEditando.inversorId,
+        tipo_inversor: kitEditando.tipoInversor,
+        valor: kitEditando.valor.trim(),
+        ativo: true,
+        atualizado_em: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from("kits_solares")
+        .upsert(registro, { onConflict: "id" });
+
+      if (error) throw error;
+
+      const kitSalvo: KitSolar = {
+        id,
+        nome: registro.nome,
+        geracao: registro.geracao_kwh,
+        potencia: registro.potencia_kwp,
+        quantidadeModulos: registro.quantidade_modulos,
+        moduloId: registro.modulo_id,
+        quantidadeInversores: registro.quantidade_inversores,
+        inversorId: registro.inversor_id,
+        tipoInversor: registro.tipo_inversor as "String" | "Microinversor",
+        valor: registro.valor,
+      };
+
+      setKitsDisponiveis((atuais) => {
+        const semAtual = atuais.filter((item) => item.id !== id);
+        return [...semAtual, kitSalvo].sort(
+          (a, b) => numero(a.geracao) - numero(b.geracao),
+        );
+      });
+
+      setKitEditando(null);
+      setGerenciarKitsAberto(false);
+      alert("Kit Solar salvo com sucesso.");
+    } catch (erro) {
+      console.error("Erro ao salvar kit Solar:", erro);
+      alert(
+        erro instanceof Error
+          ? `Não foi possível salvar o kit: ${erro.message}`
+          : "Não foi possível salvar o kit Solar.",
+      );
+    } finally {
+      setSalvandoKit(false);
+    }
+  }
+
+  async function excluirKitSolar(kit: KitSolar) {
+    if (!window.confirm(`Excluir/desativar o kit "${kit.nome}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("kits_solares")
+        .update({ ativo: false, atualizado_em: new Date().toISOString() })
+        .eq("id", kit.id);
+
+      if (error) throw error;
+
+      setKitsDisponiveis((atuais) =>
+        atuais.filter((item) => item.id !== kit.id),
+      );
+
+      if (formulario.kitId === kit.id) {
+        atualizarCampo("kitId", "");
+      }
+    } catch (erro) {
+      console.error("Erro ao excluir kit Solar:", erro);
+      alert("Não foi possível excluir/desativar o kit.");
+    }
+  }
+
   function selecionarKit(kitId: string) {
-    const kit = kits.find((item) => item.id === kitId);
+    const kit = kitsDisponiveis.find((item) => item.id === kitId);
     if (!kit) {
       setFormulario((anterior) => ({ ...anterior, kitId: "", geracao: "", potencia: "", quantidadeModulos: "", moduloId: "", quantidadeInversores: "1", inversorId: "", tipoInversor: "String", valorProposta: "" }));
       return;
@@ -395,15 +865,158 @@ export default function FormularioProposta() {
     temaPDF: formulario.temaPDF,
   };
 
-  function adicionarLinkFechamento(pdf: jsPDF, indicePagina: number) {
-    if (indicePagina !== 2) return;
+  async function capturarPaginaSolar(pagina: HTMLElement, celular: boolean) {
+    await document.fonts.ready;
+    await esperarImagens(pagina);
+    if (Array.from(pagina.querySelectorAll<HTMLImageElement>("header img")).some((imagem) => !imagem.naturalWidth)) {
+      throw new Error("A fotografia ou o brasão do cabeçalho não carregou. Aguarde e tente novamente.");
+    }
+    const controle = new AbortController();
+    const captura = html2canvas(pagina, {
+      scale: celular ? 1.5 : 2,
+      signal: controle.signal,
+      windowWidth: 794,
+      windowHeight: 1123,
+      scrollX: 0,
+      scrollY: 0,
+      onclone: (documento, paginaClonada) => {
+        // Captura isolada: evita coordenadas negativas e recortes de ancestrais.
+        documento.body.replaceChildren(paginaClonada);
+        documento.body.style.margin = "0";
+        Object.assign(paginaClonada.style, {
+          position: "relative", left: "0", top: "0", margin: "0", zoom: "1",
+        });
+      },
+      useCORS: true,
+      allowTaint: false,
+      backgroundColor: formulario.temaPDF === "escuro" ? "#09090b" : "#ffffff",
+      logging: false,
+      imageTimeout: 10000,
+      removeContainer: true,
+    });
+    let temporizador: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        captura,
+        new Promise<never>((_, rejeitar) => {
+          temporizador = setTimeout(() => {
+            rejeitar(new Error("A captura demorou mais de 20 segundos. Tente novamente usando PDF Celular."));
+            controle.abort();
+          }, 20000);
+        }),
+      ]);
+    } finally {
+      if (temporizador !== undefined) clearTimeout(temporizador);
+    }
 
-    const url =
-      "https://wa.me/5579999390653?text=" +
-      encodeURIComponent("Olá, quero fechar minha proposta de Energia Solar com a CHOQUESEG.");
+  }
 
-    // Área clicável sobre o botão de fechamento na terceira página do PDF.
-    pdf.link(112, 247, 88, 25, { url });
+
+  async function criarPDFBlob(celular = false): Promise<Blob> {
+    const raiz = previewCelularRef.current;
+    if (!raiz) throw new Error("Não foi possível localizar a proposta.");
+    const paginas = Array.from(raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"));
+    if (paginas.length !== 4) throw new Error("A proposta Solar precisa conter exatamente quatro páginas.");
+
+    const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4", compress: true });
+    for (let indice = 0; indice < paginas.length; indice += 1) {
+      const pagina = paginas[indice];
+      const canvas = await capturarPaginaSolar(pagina, celular);
+      const imagem = canvas.toDataURL("image/jpeg", celular ? 0.9 : 0.94);
+      if (indice > 0) pdf.addPage("a4", "portrait");
+      pdf.addImage(imagem, "JPEG", 0, 0, 210, 297, undefined, "FAST");
+      canvas.width = 1; canvas.height = 1;
+    }
+    return pdf.output("blob");
+  }
+
+  async function visualizarPDF() {
+    try {
+      setGerandoPDF(true);
+      const blob = await criarPDFBlob(false);
+      if (previewPdfSolarUrl) URL.revokeObjectURL(previewPdfSolarUrl);
+      const url = URL.createObjectURL(blob);
+      setPreviewPdfSolarBlob(blob);
+      setPreviewPdfSolarUrl(url);
+      setPreviewPdfSolarAberto(true);
+    } catch (erro) {
+      console.error("Erro ao visualizar PDF:", erro);
+      alert(erro instanceof Error ? erro.message : "Não foi possível visualizar o PDF.");
+    } finally {
+      setGerandoPDF(false);
+    }
+  }
+
+  function baixarPdfSolarVisualizado() {
+    if (!previewPdfSolarBlob) return;
+    const nomeCliente = formulario.nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+    const url = URL.createObjectURL(previewPdfSolarBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Proposta-CHOQUESEG-${nomeCliente}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function imprimirPdfSolarVisualizado() {
+    if (!previewPdfSolarUrl) return;
+    const janela = window.open(previewPdfSolarUrl, "_blank");
+    if (!janela) {
+      alert("Permita pop-ups para abrir a impressão.");
+      return;
+    }
+    setTimeout(() => janela.print(), 700);
+  }
+
+  async function compartilharPdfSolar(blob: Blob) {
+    const telefone = formulario.telefone.replace(/\D/g, "");
+    if (telefone.length < 10) {
+      alert("Informe um telefone/WhatsApp válido do cliente.");
+      return;
+    }
+    const mensagemPadrao = mensagemSolarAtual();
+    const nomeCliente = formulario.nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+    const arquivo = new File([blob], `Proposta-CHOQUESEG-${nomeCliente}.pdf`, { type: "application/pdf" });
+    const navegador = navigator as Navigator & { canShare?: (data?: ShareData) => boolean };
+
+    try {
+      if (navigator.share && (!navegador.canShare || navegador.canShare({ files: [arquivo] }))) {
+        await navigator.share({
+          title: `Proposta CHOQUESEG - ${formulario.nome || "Cliente"}`,
+          text: mensagemPadrao,
+          files: [arquivo],
+        });
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Proposta-CHOQUESEG-${nomeCliente}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      const destino = telefone.startsWith("55") ? telefone : `55${telefone}`;
+      window.open(`https://wa.me/${destino}?text=${encodeURIComponent(mensagemPadrao)}`, "_blank", "noopener,noreferrer");
+    } catch (erro) {
+      if (erro instanceof DOMException && erro.name === "AbortError") return;
+      console.error("Erro ao preparar envio:", erro);
+      alert(erro instanceof Error ? erro.message : "Não foi possível preparar o envio.");
+    }
+  }
+
+  async function enviarPDFCliente() {
+    try {
+      setGerandoPDF(true);
+      const blob = previewPdfSolarBlob ?? (await criarPDFBlob(true));
+      await compartilharPdfSolar(blob);
+    } finally {
+      setGerandoPDF(false);
+    }
   }
 
  async function gerarPDF() {
@@ -421,8 +1034,8 @@ export default function FormularioProposta() {
       raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
     );
 
-    if (paginas.length === 0) {
-      alert("Nenhuma página da proposta foi encontrada.");
+    if (paginas.length !== 4) {
+      alert("A proposta Solar precisa conter exatamente quatro páginas.");
       return;
     }
 
@@ -436,33 +1049,9 @@ export default function FormularioProposta() {
     for (let indice = 0; indice < paginas.length; indice += 1) {
       const pagina = paginas[indice];
 
-      console.log(`Iniciando página ${indice + 1}`);
+      const canvas = await capturarPaginaSolar(pagina, false);
 
-      const captura = html2canvas(pagina, {
-        scale: 0.8,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: "#000000",
-        logging: true,
-        imageTimeout: 5000,
-        removeContainer: true,
-      });
-
-      const limiteTempo = new Promise<never>((_, rejeitar) => {
-        setTimeout(() => {
-          rejeitar(
-            new Error(
-              `A página ${indice + 1} demorou mais de 20 segundos para ser processada.`,
-            ),
-          );
-        }, 20000);
-      });
-
-      const canvas = await Promise.race([captura, limiteTempo]);
-
-      console.log(`Página ${indice + 1} capturada`);
-
-      const imagem = canvas.toDataURL("image/jpeg", 0.6);
+      const imagem = canvas.toDataURL("image/jpeg", 0.94);
 
       if (indice > 0) {
         pdf.addPage();
@@ -478,8 +1067,6 @@ export default function FormularioProposta() {
         undefined,
         "FAST",
       );
-
-      adicionarLinkFechamento(pdf, indice);
 
       canvas.width = 1;
       canvas.height = 1;
@@ -519,8 +1106,8 @@ export default function FormularioProposta() {
         raiz.querySelectorAll<HTMLElement>("[data-pagina-proposta]"),
       );
 
-      if (paginas.length === 0) {
-        alert("Nenhuma página da proposta para celular foi encontrada.");
+      if (paginas.length !== 4) {
+        alert("A proposta Solar precisa conter exatamente quatro páginas.");
         return;
       }
 
@@ -535,17 +1122,7 @@ export default function FormularioProposta() {
 
       for (let indice = 0; indice < paginas.length; indice += 1) {
         const pagina = paginas[indice];
-        await esperarImagens(pagina);
-
-        const canvas = await html2canvas(pagina, {
-          scale: 2,
-          useCORS: true,
-          allowTaint: false,
-          backgroundColor: "#ffffff",
-          logging: false,
-          imageTimeout: 5000,
-          removeContainer: true,
-        });
+        const canvas = await capturarPaginaSolar(pagina, true);
 
         const imagem = canvas.toDataURL("image/jpeg", 0.9);
         if (indice > 0) pdf.addPage("a4", "portrait");
@@ -553,8 +1130,6 @@ export default function FormularioProposta() {
         pdf.addImage(
           imagem, "JPEG", 0, 0, larguraPdf, alturaPdf, undefined, "FAST",
         );
-
-        adicionarLinkFechamento(pdf, indice);
 
         canvas.width = 1;
         canvas.height = 1;
@@ -583,21 +1158,31 @@ export default function FormularioProposta() {
   function montarMensagemWhatsApp() {
     const nome = formulario.nome.trim() || "cliente";
     const potenciaSistema =
-      formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia;
+      formulario.modoSistema === "personalizado"
+        ? potenciaCalculada
+        : formulario.potencia;
 
-    const linhas = [
+    const valorVista =
+      calculos.valorBase > 0
+        ? dinheiro(calculos.valorBase)
+        : formulario.valorProposta || "—";
+
+    const cartao =
+      calculos.parcelaCartao > 0
+        ? `${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}`
+        : `até ${calculos.parcelasCartao}x`;
+
+    return [
       `Olá, ${nome}! Segue sua proposta de Energia Solar da CHOQUESEG.`,
       formulario.geracao ? `Geração estimada: ${formulario.geracao} kWh/mês.` : "",
       potenciaSistema ? `Potência do sistema: ${potenciaSistema}.` : "",
-      calculos.valorBase > 0 ? `Valor à vista: ${dinheiro(calculos.valorBase)}.` : "",
-      calculos.totalCartao > 0
-        ? `Cartão: ${calculos.parcelasCartao}x de ${dinheiro(calculos.parcelaCartao)}.`
-        : "",
+      `Valor à vista: ${valorVista}.`,
+      `Cartão: ${cartao}.`,
       "Financiamento em até 84 meses, sujeito à análise e aprovação.",
-      "Materiais, equipamentos e garantias estão detalhados no PDF da proposta.",
-    ];
-
-    return linhas.filter(Boolean).join("\n");
+      "Materiais, equipamentos e garantias estão detalhados no PDF.",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   function abrirWhatsApp() {
@@ -608,15 +1193,7 @@ export default function FormularioProposta() {
     }
 
     const destino = telefone.startsWith("55") ? telefone : `55${telefone}`;
-    const mensagemPadrao = montarMensagemWhatsApp();
-    const mensagemEditada = window.prompt(
-      "Revise a mensagem que acompanhará o PDF. Você pode alterar antes de enviar:",
-      mensagemPadrao,
-    );
-
-    if (mensagemEditada === null) return;
-
-    const mensagem = encodeURIComponent(mensagemEditada.trim() || mensagemPadrao);
+    const mensagem = encodeURIComponent(mensagemSolarAtual());
     window.open(`https://wa.me/${destino}?text=${mensagem}`, "_blank", "noopener,noreferrer");
   }
 
@@ -626,8 +1203,8 @@ export default function FormularioProposta() {
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center justify-between gap-3">
           <div><p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-400">ChoqueSeg</p><h1 className="text-lg font-black uppercase md:text-2xl">Gerador de proposta solar</h1></div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={gerarPDF} disabled={gerandoPDF} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Gerando PDF..." : "Gerar PDF"}</button>
-            <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDFCelular} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
+            <button type="button" onClick={() => void visualizarPDF()} disabled={gerandoPDF || gerandoPDFCelular || processandoFoto !== null} className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-60">{gerandoPDF ? "Preparando PDF..." : "👁️ Visualizar PDF"}</button>
+            <button type="button" onClick={gerarPDFCelular} disabled={gerandoPDF || gerandoPDFCelular || processandoFoto !== null} className="rounded-xl border border-yellow-400 bg-black px-4 py-3 text-sm font-black uppercase text-yellow-400 disabled:opacity-60">{gerandoPDFCelular ? "Gerando celular..." : "📱 PDF Celular"}</button>
             <button
               type="button"
               onClick={() => atualizarCampo("temaPDF", "claro")}
@@ -650,41 +1227,439 @@ export default function FormularioProposta() {
             >
               PDF Escuro
             </button>
-            <button type="button" onClick={abrirWhatsApp} className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white">Abrir WhatsApp</button>
+            <button type="button" onClick={() => void enviarPDFCliente()} disabled={gerandoPDF || gerandoPDFCelular || processandoFoto !== null} className="rounded-xl bg-green-600 px-4 py-3 text-sm font-black uppercase text-white disabled:opacity-60">📲 Enviar ao cliente</button>
             <button type="button" onClick={() => {
               setFormulario((anterior) => ({
                 ...formularioInicial,
                 enderecoLoja: anterior.enderecoLoja,
                 temaPDF: anterior.temaPDF,
               }));
-              setInstalacoes(instalacoesIniciais);
+              // As fotos padrão permanecem para as próximas propostas.
             }} className="rounded-xl border border-zinc-600 px-4 py-3 text-sm font-black uppercase text-white">Limpar</button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto grid w-full max-w-[1920px] gap-3 p-3 xl:grid-cols-[minmax(270px,30%)_minmax(0,70%)] xl:p-4">
-        <aside className="min-w-0 self-start rounded-3xl border border-yellow-400/50 bg-black p-4 xl:sticky xl:top-24">
+      <div className="mx-auto w-full max-w-[1920px] px-3 pt-3 xl:px-4">
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-zinc-800 bg-black p-2">
+          {[
+            ["dividido", "▥ Dividido"],
+            ["formulario", "✍ Formulário"],
+            ["pdf", "📄 PDF"],
+          ].map(([modo, nome]) => (
+            <button
+              key={modo}
+              type="button"
+              onClick={() =>
+                alterarModoVisualizacaoSolar(
+                  modo as "dividido" | "formulario" | "pdf",
+                )
+              }
+              className={`rounded-xl px-2 py-3 text-xs font-black uppercase ${
+                modoVisualizacaoSolar === modo
+                  ? "bg-yellow-400 text-black"
+                  : "bg-zinc-900 text-zinc-300"
+              }`}
+            >
+              {nome}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div
+        className={`mx-auto w-full max-w-[1920px] gap-3 p-3 xl:p-4 ${
+          modoVisualizacaoSolar === "dividido"
+            ? "grid grid-cols-2"
+            : "block"
+        }`}
+      >
+        <aside
+          className={`min-w-0 rounded-3xl border border-yellow-400/50 bg-black p-4 ${
+            modoVisualizacaoSolar === "pdf" ? "hidden" : "block"
+          } ${
+            modoVisualizacaoSolar === "dividido"
+              ? "h-[72dvh] min-h-[520px] overflow-y-auto overscroll-contain"
+              : "mx-auto w-full max-w-5xl"
+          }`}
+        >
           <div className="mb-6 text-center"><img src="/imagens/logo/brasao-choqueseg.png" alt="Brasão ChoqueSeg" className="mx-auto h-24 w-24 object-contain" /><p className="mt-2 text-sm font-black uppercase tracking-[0.18em] text-yellow-400">Preenchimento da proposta</p></div>
+          <div className="mb-4 overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950">
+            <button
+              type="button"
+              onClick={() => setMensagemSolarAberta((aberta) => !aberta)}
+              className="flex w-full items-center justify-between gap-3 p-3 text-left"
+            >
+              <div>
+                <p className="text-xs font-black uppercase text-yellow-400">💬 Mensagem padrão de envio</p>
+                <p className="mt-1 text-[11px] text-zinc-400">
+                  {mensagemSolarAberta ? "Edite, salve e feche." : mensagemSolarSalva ? "Mensagem salva ✓ — toque para abrir" : "Toque para abrir e configurar"}
+                </p>
+              </div>
+              <span className="font-black text-yellow-400">{mensagemSolarAberta ? "▲" : "▼"}</span>
+            </button>
+
+            {mensagemSolarAberta && (
+              <div className="border-t border-zinc-800 p-3">
+                <textarea
+                  value={mensagemPadraoSolar}
+                  onChange={(e) => setMensagemPadraoSolar(e.target.value)}
+                  placeholder={`Olá, {nome}! Segue sua proposta de Energia Solar da CHOQUESEG.
+
+Geração estimada: {geracao} kWh/mês.
+Potência: {potencia}.
+Quantidade de módulos: {modulos}.
+Valor à vista: {valor}.
+Cartão: {cartao}.`}
+                  rows={9}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 p-3 text-sm leading-relaxed text-white outline-none focus:border-yellow-400"
+                />
+                <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">
+                  Campos automáticos: {"{nome}"}, {"{consumo}"}, {"{geracao}"}, {"{potencia}"}, {"{modulos}"}, {"{valor}"}, {"{cartao}"}, {"{economia_mensal}"}, {"{economia_percentual}"} e {"{excedente}"}.
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => void salvarMensagemPadraoSolar()}
+                    disabled={salvandoMensagemSolar}
+                    className="rounded-xl bg-yellow-400 px-3 py-3 text-xs font-black uppercase text-black disabled:opacity-50"
+                  >
+                    {salvandoMensagemSolar ? "Salvando..." : "💾 Salvar mensagem"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMensagemSolarAberta(false)}
+                    className="rounded-xl border border-zinc-700 px-3 py-3 text-xs font-black uppercase text-white"
+                  >
+                    ▲ Fechar mensagem
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <div className="space-y-5">
             <SecaoFormulario titulo="Cliente">
+              <Select
+                titulo={carregandoClientes ? "Carregando clientes..." : "Cliente cadastrado"}
+                valor={formulario.clienteId}
+                aoAlterar={selecionarCliente}
+                opcoes={clientes.map((cliente) => ({
+                  valor: String(cliente.id),
+                  texto: cliente.nome,
+                }))}
+              />
+
+              {erroClientes && (
+                <div className="rounded-xl border border-red-500/60 bg-red-950/30 px-3 py-2 text-xs font-bold text-red-200">
+                  {erroClientes}
+                </div>
+              )}
+
+              <p className="text-xs leading-relaxed text-zinc-400">
+                Ao selecionar um cliente, nome, telefone, cidade, endereço e CPF/CNPJ são preenchidos automaticamente. Todos continuam editáveis.
+              </p>
+
               <Campo titulo="Nome" valor={formulario.nome} aoAlterar={(v) => atualizarCampo("nome", v)} />
-              <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
-              <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
+              <div className="grid grid-cols-2 gap-3">
+                <Campo titulo="Telefone" valor={formulario.telefone} aoAlterar={(v) => atualizarCampo("telefone", v)} />
+                <Campo titulo="Cidade" valor={formulario.cidade} aoAlterar={(v) => atualizarCampo("cidade", v)} />
+              </div>
+              <Campo titulo="Endereço do cliente" valor={formulario.enderecoCliente} aoAlterar={(v) => atualizarCampo("enderecoCliente", v)} />
+              <Campo titulo="CPF / CNPJ" valor={formulario.cpfCnpj} aoAlterar={(v) => atualizarCampo("cpfCnpj", v)} />
+
               <div className="grid grid-cols-2 gap-3">
                 <Campo titulo="Consumo kWh" valor={formulario.consumo} aoAlterar={(v) => atualizarCampo("consumo", v)} />
                 <Campo titulo="Conta mensal (R$)" valor={formulario.valorConta} aoAlterar={(v) => atualizarCampo("valorConta", v)} />
               </div>
+
               {validacaoEconomia.mostrar && (
                 <div className="rounded-xl border border-red-500/70 bg-red-950/40 px-3 py-2 text-xs font-bold leading-relaxed text-red-200">
                   ⚠ {validacaoEconomia.texto}
                 </div>
               )}
+
+              {(estimativaSolar.economiaMensal > 0 || estimativaSolar.excedenteKwh > 0) && (
+                <div className="rounded-2xl border border-yellow-400/40 bg-yellow-400/5 p-3">
+                  <p className="text-xs font-black uppercase text-yellow-400">
+                    Estimativa automática de economia
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <span className="block text-xs text-zinc-400">Economia mensal estimada</span>
+                      <strong className="mt-1 block text-lg text-yellow-400">
+                        {dinheiro(estimativaSolar.economiaMensal)}
+                      </strong>
+                    </div>
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <span className="block text-xs text-zinc-400">Economia estimada</span>
+                      <strong className="mt-1 block text-lg text-yellow-400">
+                        até {estimativaSolar.percentualEconomia}%
+                      </strong>
+                    </div>
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <span className="block text-xs text-zinc-400">Excedente estimado</span>
+                      <strong className="mt-1 block text-lg text-yellow-400">
+                        {Math.round(estimativaSolar.excedenteKwh)} kWh/mês
+                      </strong>
+                    </div>
+                    <div className="rounded-xl bg-zinc-900 p-3">
+                      <span className="block text-xs text-zinc-400">Cobertura estimada</span>
+                      <strong className="mt-1 block text-lg text-yellow-400">
+                        {estimativaSolar.coberturaPercentual}%
+                      </strong>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] leading-relaxed text-zinc-400">
+                    Valores estimados. A economia real depende da tarifa, consumo, geração efetiva,
+                    disponibilidade da rede e cobranças mínimas da distribuidora. Quando houver
+                    excedente, ele poderá gerar créditos de energia com validade de até 60 meses,
+                    conforme as regras aplicáveis do sistema de compensação.
+                  </p>
+                </div>
+              )}
+
             </SecaoFormulario>
 
             <SecaoFormulario titulo="Sistema solar">
               <div className="grid grid-cols-2 gap-2"><BotaoModo ativo={formulario.modoSistema === "kit"} texto="Kit pronto" aoClicar={() => mudarModo("kit")} /><BotaoModo ativo={formulario.modoSistema === "personalizado"} texto="Personalizado" aoClicar={() => mudarModo("personalizado")} /></div>
-              {formulario.modoSistema === "kit" && <Select titulo="Kit" valor={formulario.kitId} aoAlterar={selecionarKit} opcoes={kits.map((kit) => ({ valor: kit.id, texto: `${kit.nome} — ${kit.valor}` }))} />}
+              {formulario.modoSistema === "kit" && (
+                <div className="space-y-3">
+                  <Select
+                    titulo="Kit"
+                    valor={formulario.kitId}
+                    aoAlterar={selecionarKit}
+                    opcoes={kitsDisponiveis.map((kit) => ({
+                      valor: kit.id,
+                      texto: `${kit.nome} — ${kit.valor}`,
+                    }))}
+                  />
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={novoKitSolar}
+                      className="rounded-xl bg-yellow-400 px-3 py-3 text-xs font-black uppercase text-black"
+                    >
+                      + Criar novo kit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGerenciarKitsAberto((aberto) => !aberto)}
+                      className="rounded-xl border border-yellow-400 px-3 py-3 text-xs font-black uppercase text-yellow-400"
+                    >
+                      ⚙ Gerenciar kits
+                    </button>
+                  </div>
+
+                  {gerenciarKitsAberto && (
+                    <div className="rounded-2xl border border-zinc-700 bg-zinc-900 p-3">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <p className="text-xs font-black uppercase text-yellow-400">
+                          Biblioteca de kits solares
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setGerenciarKitsAberto(false)}
+                          className="text-xs font-black uppercase text-zinc-400"
+                        >
+                          Fechar
+                        </button>
+                      </div>
+
+                      <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
+                        {kitsDisponiveis.map((kit) => (
+                          <div
+                            key={kit.id}
+                            className="rounded-xl border border-zinc-700 bg-black p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-black text-white">{kit.nome}</p>
+                                <p className="mt-1 text-xs text-zinc-400">
+                                  {kit.geracao} kWh/mês · {kit.potencia} · {kit.valor || "Sem preço"}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="mt-3 grid grid-cols-3 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => editarKitSolar(kit)}
+                                className="rounded-lg border border-yellow-400 px-2 py-2 text-[10px] font-black uppercase text-yellow-400"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => duplicarKitSolar(kit)}
+                                className="rounded-lg border border-zinc-600 px-2 py-2 text-[10px] font-black uppercase text-white"
+                              >
+                                Duplicar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void excluirKitSolar(kit)}
+                                className="rounded-lg border border-red-500/60 px-2 py-2 text-[10px] font-black uppercase text-red-400"
+                              >
+                                Excluir
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {kitEditando && (
+                    <div className="rounded-2xl border border-yellow-400/50 bg-zinc-900 p-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-black uppercase text-yellow-400">
+                          {kitEditando.id ? "Editar kit" : "Novo kit"}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setKitEditando(null)}
+                          className="text-xs font-black uppercase text-zinc-400"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+
+                      <div className="mt-3 space-y-3">
+                        <Campo
+                          titulo="Nome do kit"
+                          valor={kitEditando.nome}
+                          aoAlterar={(v) =>
+                            setKitEditando((anterior) =>
+                              anterior ? { ...anterior, nome: v } : anterior,
+                            )
+                          }
+                        />
+                        <div className="grid grid-cols-2 gap-3">
+                          <Campo
+                            titulo="Geração kWh/mês"
+                            valor={kitEditando.geracao}
+                            aoAlterar={(v) =>
+                              setKitEditando((anterior) =>
+                                anterior ? { ...anterior, geracao: v } : anterior,
+                              )
+                            }
+                          />
+                          <Campo
+                            titulo="Potência kWp"
+                            valor={kitEditando.potencia}
+                            aoAlterar={(v) =>
+                              setKitEditando((anterior) =>
+                                anterior ? { ...anterior, potencia: v } : anterior,
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Campo
+                            titulo="Qtd. módulos"
+                            valor={kitEditando.quantidadeModulos}
+                            aoAlterar={(v) =>
+                              setKitEditando((anterior) =>
+                                anterior
+                                  ? { ...anterior, quantidadeModulos: v }
+                                  : anterior,
+                              )
+                            }
+                          />
+                          <Select
+                            titulo="Módulo"
+                            valor={kitEditando.moduloId}
+                            aoAlterar={(v) =>
+                              setKitEditando((anterior) =>
+                                anterior ? { ...anterior, moduloId: v } : anterior,
+                              )
+                            }
+                            opcoes={modulos.map((item) => ({
+                              valor: item.id,
+                              texto: `${item.marca} ${item.modelo} ${item.potencia}`,
+                            }))}
+                          />
+                        </div>
+                        <Select
+                          titulo="Tipo de inversor"
+                          valor={kitEditando.tipoInversor}
+                          aoAlterar={(v) =>
+                            setKitEditando((anterior) =>
+                              anterior
+                                ? {
+                                    ...anterior,
+                                    tipoInversor:
+                                      v === "Microinversor"
+                                        ? "Microinversor"
+                                        : "String",
+                                    inversorId: "",
+                                  }
+                                : anterior,
+                            )
+                          }
+                          opcoes={[
+                            { valor: "String", texto: "Inversor String" },
+                            { valor: "Microinversor", texto: "Microinversor" },
+                          ]}
+                        />
+                        <div className="grid grid-cols-[100px_1fr] gap-3">
+                          <Campo
+                            titulo="Quantidade"
+                            valor={kitEditando.quantidadeInversores}
+                            aoAlterar={(v) =>
+                              setKitEditando((anterior) =>
+                                anterior
+                                  ? { ...anterior, quantidadeInversores: v }
+                                  : anterior,
+                              )
+                            }
+                          />
+                          <Select
+                            titulo={
+                              kitEditando.tipoInversor === "Microinversor"
+                                ? "Microinversor"
+                                : "Inversor"
+                            }
+                            valor={kitEditando.inversorId}
+                            aoAlterar={(v) =>
+                              setKitEditando((anterior) =>
+                                anterior ? { ...anterior, inversorId: v } : anterior,
+                              )
+                            }
+                            opcoes={
+                              (kitEditando.tipoInversor === "Microinversor"
+                                ? microinversores
+                                : inversores
+                              ).map((item) => ({
+                                valor: item.id,
+                                texto: `${item.marca} ${item.modelo} ${item.potencia}`,
+                              }))
+                            }
+                          />
+                        </div>
+                        <Campo
+                          titulo="Valor do kit"
+                          valor={kitEditando.valor}
+                          aoAlterar={(v) =>
+                            setKitEditando((anterior) =>
+                              anterior ? { ...anterior, valor: v } : anterior,
+                            )
+                          }
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => void salvarKitSolar()}
+                          disabled={salvandoKit}
+                          className="w-full rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-50"
+                        >
+                          {salvandoKit ? "Salvando kit..." : "💾 Salvar kit"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3"><Campo titulo="Geração/mês" valor={formulario.geracao} somenteLeitura={formulario.modoSistema === "kit"} aoAlterar={(v) => atualizarCampo("geracao", v)} /><Campo titulo="Potência" valor={formulario.modoSistema === "personalizado" ? potenciaCalculada : formulario.potencia} somenteLeitura aoAlterar={() => undefined} /></div>
               <div className="grid grid-cols-2 gap-3"><Campo titulo="Qtd. módulos" valor={formulario.quantidadeModulos} somenteLeitura={formulario.modoSistema === "kit"} aoAlterar={(v) => atualizarCampo("quantidadeModulos", v)} /><Select titulo="Tipo de inversor" valor={formulario.tipoInversor} aoAlterar={(v) => setFormulario((anterior) => ({ ...anterior, tipoInversor: v as Formulario["tipoInversor"], inversorId: "" }))} opcoes={[{ valor: "String", texto: "Inversor String" }, { valor: "Microinversor", texto: "Microinversor" }]} /></div>
               <SelectComAdicionar titulo="Módulo" valor={formulario.moduloId} aoAlterar={(v) => atualizarCampo("moduloId", v)} opcoes={modulos.map((item) => ({ valor: item.id, texto: `${item.marca} ${item.modelo} ${item.potencia}` }))} aoAdicionar={() => adicionarEquipamento("modulo")} />
@@ -795,19 +1770,18 @@ export default function FormularioProposta() {
         </aside>
         <section
           ref={previewAreaRef}
-          className="min-w-0 overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-900/60 p-2"
+          className={`min-w-0 rounded-3xl border border-zinc-800 bg-zinc-900/60 p-2 ${
+            modoVisualizacaoSolar === "formulario" ? "hidden" : "block"
+          } ${
+            modoVisualizacaoSolar === "dividido"
+              ? "h-[72dvh] min-h-[520px] overflow-auto overscroll-contain"
+              : "mx-auto w-full max-w-[1100px] overflow-visible"
+          }`}
         >
-          <div
-            className="flex w-full justify-center overflow-hidden"
-            style={{ height: `${Math.ceil(3465 * previewScale)}px` }}
-          >
+          <div className="flex w-full justify-center overflow-visible">
             <div
-              className="origin-top"
-              style={{
-                width: "818px",
-                transform: `scale(${previewScale})`,
-                transformOrigin: "top center",
-              }}
+              className="w-[794px] origin-top"
+              style={{ zoom: escalaPreview } as CSSProperties}
             >
               <PreviewProposta ref={previewRef} dados={dadosPreview} />
             </div>
@@ -817,7 +1791,51 @@ export default function FormularioProposta() {
           <PreviewProposta ref={previewCelularRef} dados={dadosPreview} />
         </div>
       </div>
-    </main>
+          {previewPdfSolarAberto && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 p-2 md:p-5">
+          <div className="flex h-[96vh] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-zinc-700 bg-zinc-950 shadow-2xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 p-4">
+              <div>
+                <h2 className="text-lg font-black uppercase text-yellow-400">Proposta de Energia Solar</h2>
+                <p className="text-xs text-zinc-400">
+                  Confira o PDF. Este mesmo arquivo será usado para imprimir, baixar ou enviar.
+                </p>
+              </div>
+              <button type="button" onClick={() => setPreviewPdfSolarAberto(false)} className="rounded-xl border border-zinc-700 px-4 py-2 font-black text-white">
+                ✕ Fechar
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 bg-zinc-800 p-2 md:p-4">
+              {previewPdfSolarUrl && (
+                <iframe
+                  title="Pré-visualização da proposta de Energia Solar"
+                  src={previewPdfSolarUrl}
+                  className="h-full min-h-[65vh] w-full rounded-lg bg-white"
+                />
+              )}
+            </div>
+
+            <div className="grid gap-2 border-t border-zinc-800 bg-zinc-950 p-3 sm:grid-cols-3">
+              <button type="button" onClick={imprimirPdfSolarVisualizado} className="rounded-xl bg-white px-4 py-3 font-black uppercase text-black">
+                🖨️ Imprimir
+              </button>
+              <button type="button" onClick={baixarPdfSolarVisualizado} className="rounded-xl border border-yellow-400 px-4 py-3 font-black uppercase text-yellow-300">
+                ⬇️ Baixar PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => previewPdfSolarBlob && void compartilharPdfSolar(previewPdfSolarBlob)}
+                className="rounded-xl bg-green-600 px-4 py-4 font-black uppercase text-white"
+              >
+                📲 Enviar ao cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+</main>
   );
 }
 

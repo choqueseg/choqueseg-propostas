@@ -19,7 +19,6 @@ import RecibosModule from "@/modules/recibos/RecibosModule";
 import EstoqueModule from "@/modules/estoque/EstoqueModule";
 import FormularioAutomacao from "@/components/FormularioAutomacao";
 import OrcamentosRapidosModule from "@/modules/orcamentos-rapidos/OrcamentosRapidosModule";
-import ConfigEmpresaModule from "@/modules/configuracoes/ConfigEmpresaModule";
 
 import ContratosModule from "@/modules/contratos/ContratosModule";
 import EngenhariaModule from "@/modules/engenharia/EngenhariaModule";
@@ -102,8 +101,7 @@ type TelaSistema =
   | "sala-ia"
   | "projetos3d"
   | "convidar"
-  | "senhas"
-  | "configuracoes";
+  | "senhas";
 
 type TipoProposta =
   | "energia-solar"
@@ -148,7 +146,6 @@ const ORDEM_MENU_PADRAO: TelaSistema[] = [
   "contratos",
   "sala-ia",
   "projetos3d",
-  "configuracoes",
 ];
 
 export default function Home() {
@@ -1314,9 +1311,7 @@ export default function Home() {
               aoSair={() => setTelaAtual("dashboard")}
             />
           )}
-{telaAtual === "configuracoes" && ehAdministrador && (
-  <ConfigEmpresaModule />
-)}
+
           {telaAtual === "avaliacoes" && podeAvaliacoes && (
             <AvaliacaoGoogleModule />
           )}
@@ -1424,7 +1419,6 @@ const ITENS_ADMINISTRADOR: ItemMenu[] = [
   { tela: "contratos", nome: "Contratos", icone: "📑" },
   { tela: "sala-ia", nome: "Sala IA", icone: "🤖" },
   { tela: "projetos3d", nome: "Projeto 3D", icone: "🏠" },
-  { tela: "configuracoes", nome: "Configurações da Empresa", icone: "⚙️" },
 ];
 
 const ITENS_VENDEDOR: ItemMenu[] = [
@@ -2334,5 +2328,4 @@ function ModuloEmConstrucao({
     </section>
   );
 }
-
 
