@@ -1038,6 +1038,7 @@ export default function Home() {
   }
 
   function temPermissao(permissao: string) {
+    if (!usuarioLogado) return false;
     if (usuarioLogado.perfil === "administrador") return true;
     return (usuarioLogado.permissoes ?? []).includes(permissao);
   }
