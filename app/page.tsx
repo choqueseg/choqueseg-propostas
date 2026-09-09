@@ -1058,6 +1058,7 @@ export default function Home() {
   }
 
   function podeAcessarTela(tela: TelaSistema) {
+    if (!usuarioLogado) return false;
     if (usuarioLogado.perfil === "administrador") return true;
     return temPermissao(permissaoDaTela(tela));
   }
@@ -2423,4 +2424,5 @@ function ModuloEmConstrucao({
     </section>
   );
 }
+
 
