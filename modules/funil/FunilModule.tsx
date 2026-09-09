@@ -134,6 +134,11 @@ export default function FunilModule() {
   const [clienteMensagem, setClienteMensagem] = useState<Cliente | null>(null);
   const [mensagemWhatsApp, setMensagemWhatsApp] = useState("");
   const [carregandoNuvem, setCarregandoNuvem] = useState(true);
+  const [salvandoStatusId, setSalvandoStatusId] = useState<string | null>(null);
+  const [acaoServicoClienteId, setAcaoServicoClienteId] = useState<string | null>(null);
+  const [configurandoFunil, setConfigurandoFunil] = useState(false);
+  const [etapasVisiveis, setEtapasVisiveis] = useState<StatusCliente[]>(ETAPAS);
+  const [marcosConcluidos, setMarcosConcluidos] = useState<Record<string, StatusCliente[]>>({});
 
   useEffect(() => {
     let ativo = true;
@@ -327,6 +332,128 @@ export default function FunilModule() {
     evento.dataTransfer.dropEffect = "move";
   }
 
+  function salvarEtapasVisiveis(novas: StatusCliente[]) {
+    const ordenadas = ETAPAS.filter((etapa) => novas.includes(etapa));
+    setEtapasVisiveis(ordenadas);
+    window.localStorage.setItem(
+      "choqueseg_funil_etapas_visiveis",
+      JSON.stringify(ordenadas),
+    );
+  }
+
+  function alternarEtapaVisivel(etapa: StatusCliente) {
+    if (etapasVisiveis.includes(etapa)) {
+      if (etapasVisiveis.length === 1) {
+        window.alert("Mantenha pelo menos uma etapa visível no Funil.");
+        return;
+      }
+      salvarEtapasVisiveis(etapasVisiveis.filter((item) => item !== etapa));
+      return;
+    }
+    salvarEtapasVisiveis([...etapasVisiveis, etapa]);
+  }
+
+  function marcarEtapaComoRealizada(cliente: Cliente, etapa: StatusCliente) {
+    const atuais = marcosConcluidos[cliente.id] ?? [];
+    if (atuais.includes(etapa)) return;
+
+    const proximo = {
+      ...marcosConcluidos,
+      [cliente.id]: [...atuais, etapa],
+    };
+
+    setMarcosConcluidos(proximo);
+    window.localStorage.setItem(
+      "choqueseg_funil_marcos_concluidos",
+      JSON.stringify(proximo),
+    );
+  }
+
+  async function persistirStatusCliente(
+    clienteId: string,
+    novaEtapa: StatusCliente,
+  ) {
+    const clienteAtual = clientes.find((cliente) => cliente.id === clienteId);
+    if (!clienteAtual) return false;
+    if (!podeMoverParaEtapa(clienteAtual, novaEtapa)) return false;
+    if (clienteAtual.status === novaEtapa) return true;
+
+    const statusAnterior = clienteAtual.status;
+    const retornoAnterior = clienteAtual.retornoEm;
+
+    // Ao avançar para outra etapa, preserva visualmente a etapa anterior como realizada.
+    marcarEtapaComoRealizada(clienteAtual, statusAnterior);
+
+    // Só mantém retorno enquanto o cliente estiver aguardando follow-up.
+    const retornoEm =
+      novaEtapa === "Orçamento Enviado"
+        ? adicionarDoisDias(new Date())
+        : novaEtapa === "Cliente Ainda Não Decidiu"
+          ? clienteAtual.retornoEm
+          : "";
+
+    setSalvandoStatusId(clienteId);
+
+    // Atualização visual imediata, mas com rollback se a nuvem falhar.
+    setClientes((atuais) =>
+      atuais.map((cliente) =>
+        cliente.id === clienteId
+          ? { ...cliente, status: novaEtapa, retornoEm }
+          : cliente,
+      ),
+    );
+
+    const { data, error } = await supabase
+      .from("clientes")
+      .update({
+        status: novaEtapa,
+        retorno_em: retornoEm || null,
+      })
+      .eq("id", clienteId)
+      .select("id,status,retorno_em")
+      .single();
+
+    if (error || !data) {
+      console.error("Erro ao persistir status do cliente no Funil:", error);
+
+      setClientes((atuais) =>
+        atuais.map((cliente) =>
+          cliente.id === clienteId
+            ? {
+                ...cliente,
+                status: statusAnterior,
+                retornoEm: retornoAnterior,
+              }
+            : cliente,
+        ),
+      );
+
+      window.alert(
+        "Não foi possível salvar a alteração no Funil. O status anterior foi restaurado.",
+      );
+      setSalvandoStatusId(null);
+      return false;
+    }
+
+    const statusConfirmado = normalizarStatusLegado(String(data.status ?? ""));
+    const retornoConfirmado = String(data.retorno_em ?? "");
+
+    setClientes((atuais) =>
+      atuais.map((cliente) =>
+        cliente.id === clienteId
+          ? {
+              ...cliente,
+              status: statusConfirmado,
+              retornoEm: retornoConfirmado,
+            }
+          : cliente,
+      ),
+    );
+
+    setSalvandoStatusId(null);
+    return true;
+  }
+
   function soltarNaEtapa(
     evento: DragEvent<HTMLDivElement>,
     novaEtapa: StatusCliente,
@@ -334,36 +461,11 @@ export default function FunilModule() {
     evento.preventDefault();
 
     const clienteId =
-      evento.dataTransfer.getData("text/plain") ||
-      clienteArrastado;
+      evento.dataTransfer.getData("text/plain") || clienteArrastado;
 
     if (!clienteId) return;
 
-    const clienteAtual = clientes.find((cliente) => cliente.id === clienteId);
-    if (!clienteAtual) return;
-    if (!podeMoverParaEtapa(clienteAtual, novaEtapa)) return;
-
-    const retornoEm =
-      novaEtapa === "Orçamento Enviado"
-        ? adicionarDoisDias(new Date())
-        : clienteAtual.retornoEm;
-
-    setClientes((atuais) =>
-      atuais.map((cliente) =>
-        cliente.id === clienteId
-          ? { ...cliente, status: novaEtapa, retornoEm }
-          : cliente,
-      ),
-    );
-
-    void supabase
-      .from("clientes")
-      .update({ status: novaEtapa, retorno_em: retornoEm })
-      .eq("id", clienteId)
-      .then(({ error }) => {
-        if (error) console.error("Erro ao atualizar cliente no funil:", error);
-      });
-
+    void persistirStatusCliente(clienteId, novaEtapa);
     setClienteArrastado(null);
   }
 
@@ -371,30 +473,131 @@ export default function FunilModule() {
     clienteId: string,
     novaEtapa: StatusCliente,
   ) {
-    const clienteAtual = clientes.find((cliente) => cliente.id === clienteId);
-    if (!clienteAtual) return;
-    if (!podeMoverParaEtapa(clienteAtual, novaEtapa)) return;
+    void persistirStatusCliente(clienteId, novaEtapa);
+  }
 
-    const retornoEm =
-      novaEtapa === "Orçamento Enviado"
-        ? adicionarDoisDias(new Date())
-        : clienteAtual.retornoEm;
+  async function buscarUltimoServicoCliente(clienteId: string) {
+    const { data, error } = await supabase
+      .from("servicos")
+      .select("id,cliente_id,cliente_nome,status,historico,data,horario,criado_em")
+      .eq("cliente_id", clienteId)
+      .order("data", { ascending: false })
+      .order("horario", { ascending: false })
+      .limit(10);
 
-    setClientes((atuais) =>
-      atuais.map((cliente) =>
-        cliente.id === clienteId
-          ? { ...cliente, status: novaEtapa, retornoEm }
-          : cliente,
-      ),
+    if (error) {
+      console.error("Erro ao buscar serviço do cliente:", error);
+      window.alert(`Não foi possível localizar o serviço: ${error.message}`);
+      return null;
+    }
+
+    const lista = data ?? [];
+
+    return (
+      lista.find((item: any) => String(item.status ?? "") !== "Concluído") ??
+      lista[0] ??
+      null
+    );
+  }
+
+  async function concluirServicoPeloFunil(cliente: Cliente) {
+    if (
+      !window.confirm(
+        `Marcar o serviço de ${cliente.nome} como concluído?\n\nIsso atualizará o serviço na Agenda e o cliente no Funil.`,
+      )
+    ) {
+      return;
+    }
+
+    setAcaoServicoClienteId(cliente.id);
+
+    const servico = await buscarUltimoServicoCliente(cliente.id);
+
+    if (!servico) {
+      setAcaoServicoClienteId(null);
+      window.alert("Nenhum serviço/agendamento vinculado a este cliente foi encontrado.");
+      return;
+    }
+
+    const agora = new Date().toISOString();
+    const historicoAtual = Array.isArray(servico.historico) ? servico.historico : [];
+    const historicoNovo = [
+      ...historicoAtual,
+      {
+        id: crypto.randomUUID(),
+        dataHora: agora,
+        usuario: "Funil CHOQUESEG",
+        descricao: "Serviço marcado como concluído pelo Funil",
+      },
+    ];
+
+    const { error: erroServico } = await supabase
+      .from("servicos")
+      .update({
+        status: "Concluído",
+        concluido_em: agora,
+        concluido_por: "Funil CHOQUESEG",
+        historico: historicoNovo,
+        atualizado_em: agora,
+      })
+      .eq("id", servico.id);
+
+    if (erroServico) {
+      console.error("Erro ao concluir serviço pelo Funil:", erroServico);
+      setAcaoServicoClienteId(null);
+      window.alert(`Não foi possível concluir o serviço: ${erroServico.message}`);
+      return;
+    }
+
+    const ok = await persistirStatusCliente(cliente.id, "Serviço Concluído");
+    setAcaoServicoClienteId(null);
+
+    if (ok) {
+      window.alert("Serviço concluído e Funil atualizado.");
+    }
+  }
+
+  async function excluirServicoPeloFunil(cliente: Cliente) {
+    if (
+      !window.confirm(
+        `Excluir o serviço/agendamento de ${cliente.nome}?\n\nO registro será removido da Agenda. O cliente voltará para "Serviço Fechado / Adiantamento Pago".`,
+      )
+    ) {
+      return;
+    }
+
+    setAcaoServicoClienteId(cliente.id);
+
+    const servico = await buscarUltimoServicoCliente(cliente.id);
+
+    if (!servico) {
+      setAcaoServicoClienteId(null);
+      window.alert("Nenhum serviço/agendamento vinculado a este cliente foi encontrado.");
+      return;
+    }
+
+    const { error: erroExcluir } = await supabase
+      .from("servicos")
+      .delete()
+      .eq("id", servico.id);
+
+    if (erroExcluir) {
+      console.error("Erro ao excluir serviço pelo Funil:", erroExcluir);
+      setAcaoServicoClienteId(null);
+      window.alert(`Não foi possível excluir o serviço: ${erroExcluir.message}`);
+      return;
+    }
+
+    const ok = await persistirStatusCliente(
+      cliente.id,
+      "Serviço Fechado / Adiantamento Pago",
     );
 
-    void supabase
-      .from("clientes")
-      .update({ status: novaEtapa, retorno_em: retornoEm })
-      .eq("id", clienteId)
-      .then(({ error }) => {
-        if (error) console.error("Erro ao atualizar cliente no funil:", error);
-      });
+    setAcaoServicoClienteId(null);
+
+    if (ok) {
+      window.alert("Serviço excluído da Agenda e cliente devolvido para Serviço Fechado.");
+    }
   }
 
   function montarMensagemFollowUp(cliente: Cliente) {
@@ -466,16 +669,82 @@ export default function FunilModule() {
           </p>
         </div>
 
-        <input
-          value={busca}
-          onChange={(evento) => setBusca(evento.target.value)}
-          placeholder="Buscar cliente..."
-          className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-400 lg:max-w-sm"
-        />
+        <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-xl">
+          <button
+            type="button"
+            onClick={() => setConfigurandoFunil((atual) => !atual)}
+            className={`shrink-0 rounded-xl border px-4 py-3 text-xs font-black uppercase transition ${
+              configurandoFunil
+                ? "border-yellow-400 bg-yellow-400 text-black"
+                : "border-yellow-400/50 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+            }`}
+          >
+            ⚙ Configurar Funil
+          </button>
+
+          <input
+            value={busca}
+            onChange={(evento) => setBusca(evento.target.value)}
+            placeholder="Buscar cliente..."
+            className="min-w-0 flex-1 rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-400"
+          />
+        </div>
       </div>
 
+      {configurandoFunil && (
+        <section className="mt-5 rounded-2xl border border-yellow-400/30 bg-black p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black uppercase text-yellow-400">
+                Configurar etapas do Funil
+              </h3>
+              <p className="mt-1 text-xs text-zinc-500">
+                Ocultar uma etapa não apaga clientes nem altera o status.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => salvarEtapasVisiveis(ETAPAS)}
+              className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-black uppercase text-zinc-300"
+            >
+              Mostrar todas
+            </button>
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+            {ETAPAS.map((etapa) => {
+              const visivel = etapasVisiveis.includes(etapa);
+              const quantidade = clientes.filter((cliente) => cliente.status === etapa).length;
+
+              return (
+                <button
+                  key={etapa}
+                  type="button"
+                  onClick={() => alternarEtapaVisivel(etapa)}
+                  className={`rounded-xl border px-3 py-3 text-left transition ${
+                    visivel
+                      ? "border-yellow-400/50 bg-yellow-400/10"
+                      : "border-zinc-800 bg-zinc-950 opacity-70"
+                  }`}
+                >
+                  <p className={`text-xs font-black uppercase ${
+                    visivel ? "text-yellow-300" : "text-zinc-500"
+                  }`}>
+                    {visivel ? "☑" : "☐"} {etapa}
+                  </p>
+                  <p className="mt-1 text-[10px] font-bold text-zinc-500">
+                    {quantidade} cliente{quantidade === 1 ? "" : "s"} · {visivel ? "visível" : "oculto"}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       <div className="mt-7 space-y-5">
-        {agruparEtapas(ETAPAS, 5).map((grupo, indiceGrupo) => (
+        {agruparEtapas(etapasVisiveis, 5).map((grupo, indiceGrupo) => (
           <LinhaEtapas
             key={`grupo-${indiceGrupo}`}
             etapas={grupo}
@@ -487,6 +756,12 @@ export default function FunilModule() {
             alterarStatus={alterarStatus}
             setClienteDetalhes={setClienteDetalhes}
             prepararMensagemFollowUp={prepararMensagemFollowUp}
+            salvandoStatusId={salvandoStatusId}
+            acaoServicoClienteId={acaoServicoClienteId}
+            concluirServicoPeloFunil={concluirServicoPeloFunil}
+            excluirServicoPeloFunil={excluirServicoPeloFunil}
+            marcosConcluidos={marcosConcluidos}
+            marcarEtapaComoRealizada={marcarEtapaComoRealizada}
           />
         ))}
       </div>
@@ -631,6 +906,12 @@ function LinhaEtapas({
   alterarStatus,
   setClienteDetalhes,
   prepararMensagemFollowUp,
+  salvandoStatusId,
+  acaoServicoClienteId,
+  concluirServicoPeloFunil,
+  excluirServicoPeloFunil,
+  marcosConcluidos,
+  marcarEtapaComoRealizada,
 }: {
   etapas: StatusCliente[];
   clientesFiltrados: Cliente[];
@@ -644,6 +925,12 @@ function LinhaEtapas({
   alterarStatus: (clienteId: string, novaEtapa: StatusCliente) => void;
   setClienteDetalhes: (cliente: Cliente | null) => void;
   prepararMensagemFollowUp: (cliente: Cliente) => void;
+  salvandoStatusId: string | null;
+  acaoServicoClienteId: string | null;
+  concluirServicoPeloFunil: (cliente: Cliente) => Promise<void>;
+  excluirServicoPeloFunil: (cliente: Cliente) => Promise<void>;
+  marcosConcluidos: Record<string, StatusCliente[]>;
+  marcarEtapaComoRealizada: (cliente: Cliente, etapa: StatusCliente) => void;
 }) {
   const topoRef = useRef<HTMLDivElement | null>(null);
   const conteudoRef = useRef<HTMLDivElement | null>(null);
@@ -676,7 +963,7 @@ function LinhaEtapas({
         }
         className="overflow-x-auto pb-2"
       >
-        <div className="h-2 min-w-[1050px] 2xl:min-w-0" />
+        <div className="h-2 min-w-[820px] lg:min-w-0" />
       </div>
 
       <div
@@ -686,7 +973,12 @@ function LinhaEtapas({
         }
         className="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="grid min-w-[1050px] grid-cols-5 gap-2.5 2xl:min-w-0">
+        <div
+          className="grid min-w-[760px] gap-2 lg:min-w-0"
+          style={{
+            gridTemplateColumns: `repeat(${Math.max(1, Math.min(etapas.length, 5))}, minmax(0, 1fr))`,
+          }}
+        >
           {etapas.map((etapa) => {
             const clientesDaEtapa = clientesFiltrados.filter(
               (cliente) => cliente.status === etapa,
@@ -699,13 +991,13 @@ function LinhaEtapas({
                 key={etapa}
                 onDragOver={permitirSoltar}
                 onDrop={(evento) => soltarNaEtapa(evento, etapa)}
-                className={`min-w-0 rounded-2xl border p-2.5 ${
+                className={`min-w-0 rounded-xl border p-2 ${
                   etapaSolar
                     ? "border-blue-500/30 bg-blue-500/5"
                     : "border-zinc-800 bg-black"
                 }`}
               >
-                <div className="flex min-h-[44px] items-start justify-between gap-2 border-b border-zinc-800 pb-2.5">
+                <div className="flex min-h-[42px] items-start justify-between gap-1.5 border-b border-zinc-800 pb-2">
                   <div>
                     <h3
                       className={`text-xs font-black uppercase leading-tight ${
@@ -732,7 +1024,13 @@ function LinhaEtapas({
                   </span>
                 </div>
 
-                <div className="mt-2.5 min-h-[150px] space-y-2.5">
+                <div
+                  className={`mt-2 min-h-[145px] space-y-2 ${
+                    clientesDaEtapa.length > 3
+                      ? "max-h-[250px] overflow-y-auto pr-1 [scrollbar-width:thin]"
+                      : ""
+                  }`}
+                >
                   {clientesDaEtapa.length === 0 ? (
                     <div className="flex min-h-[130px] items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950 p-4 text-center text-xs text-zinc-600">
                       Arraste um cliente para esta etapa
@@ -753,7 +1051,7 @@ function LinhaEtapas({
                               atual === cliente.id ? null : cliente.id,
                             )
                           }
-                          className={`cursor-grab rounded-xl border bg-zinc-950 p-2.5 shadow-lg transition active:cursor-grabbing ${
+                          className={`cursor-grab rounded-lg border bg-zinc-950 px-2 py-1.5 shadow-lg transition active:cursor-grabbing ${
                             clienteArrastado === cliente.id
                               ? "border-yellow-400 opacity-60"
                               : expandido
@@ -763,15 +1061,11 @@ function LinhaEtapas({
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <h4 className="truncate font-black uppercase text-white">
+                              <h4 className="truncate text-sm font-black uppercase text-white">
                                 {cliente.nome}
                               </h4>
 
-                              <p className="mt-1 truncate text-xs font-bold text-yellow-400">
-                                📞 {cliente.telefone || "Telefone não informado"}
-                              </p>
-
-                              <p className="mt-1 truncate text-xs font-bold text-zinc-300">
+                              <p className="mt-1 truncate text-[10px] font-bold text-zinc-400">
                                 🛠 {cliente.tipoServico || "Serviço não informado"}
                               </p>
                             </div>
@@ -798,8 +1092,20 @@ function LinhaEtapas({
                               onClick={(evento) => evento.stopPropagation()}
                             >
                               <div className="space-y-1 text-xs text-zinc-400">
+                                <p>📞 {cliente.telefone || "Telefone não informado"}</p>
                                 <p>📍 {cliente.cidade || "Cidade não informada"}</p>
                                 <p>📣 {cliente.origem || "Origem não informada"}</p>
+
+                                {cliente.status === "Serviço Concluído" && (
+                                  <button
+                                    type="button"
+                                    disabled={acaoServicoClienteId === cliente.id}
+                                    onClick={() => void excluirServicoPeloFunil(cliente)}
+                                    className="col-span-2 rounded-lg border border-red-500/60 px-2 py-2.5 text-[11px] font-black uppercase text-red-400 disabled:cursor-wait disabled:opacity-50"
+                                  >
+                                    🗑 Excluir serviço da Agenda
+                                  </button>
+                                )}
 
                                 {etapa === "Cliente Ainda Não Decidiu" &&
                                   cliente.retornoEm && (
@@ -809,15 +1115,42 @@ function LinhaEtapas({
                                   )}
                               </div>
 
+                              {(marcosConcluidos[cliente.id]?.length ?? 0) > 0 && (
+                                <div className="mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-2">
+                                  <p className="mb-1.5 text-[9px] font-black uppercase text-emerald-300">
+                                    Etapas realizadas
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {marcosConcluidos[cliente.id].map((marco) => (
+                                      <span
+                                        key={marco}
+                                        className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[8px] font-black uppercase text-emerald-300"
+                                      >
+                                        ✓ {marco}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              <button
+                                type="button"
+                                onClick={() => marcarEtapaComoRealizada(cliente, cliente.status)}
+                                className="mb-2 w-full rounded-lg border border-emerald-500/40 px-2 py-2 text-[9px] font-black uppercase text-emerald-300"
+                              >
+                                ✓ Marcar etapa atual como realizada
+                              </button>
+
                               <select
                                 value={cliente.status}
+                                disabled={salvandoStatusId === cliente.id}
                                 onChange={(evento) =>
                                   alterarStatus(
                                     cliente.id,
                                     evento.target.value as StatusCliente,
                                   )
                                 }
-                                className="mt-3 w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-yellow-400"
+                                className="mt-3 w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-[11px] font-bold text-white outline-none focus:border-yellow-400 disabled:cursor-wait disabled:opacity-60"
                               >
                                 {ETAPAS.map((opcao) => (
                                   <option key={opcao} value={opcao}>
@@ -825,6 +1158,34 @@ function LinhaEtapas({
                                   </option>
                                 ))}
                               </select>
+
+                              {salvandoStatusId === cliente.id && (
+                                <p className="mt-2 text-center text-[10px] font-black uppercase text-yellow-400">
+                                  Salvando alteração...
+                                </p>
+                              )}
+
+                              {(cliente.status === "Serviço Agendado" || cliente.status === "Em Execução") && (
+                                <div className="mt-3 grid gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={acaoServicoClienteId === cliente.id}
+                                    onClick={() => void concluirServicoPeloFunil(cliente)}
+                                    className="w-full rounded-lg bg-emerald-600 px-2 py-2.5 text-[10px] font-black uppercase text-white disabled:cursor-wait disabled:opacity-50"
+                                  >
+                                    {acaoServicoClienteId === cliente.id ? "Processando..." : "✓ Concluir serviço"}
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    disabled={acaoServicoClienteId === cliente.id}
+                                    onClick={() => void excluirServicoPeloFunil(cliente)}
+                                    className="w-full rounded-lg border border-red-500/60 px-2 py-2.5 text-[10px] font-black uppercase text-red-400 disabled:cursor-wait disabled:opacity-50"
+                                  >
+                                    🗑 Excluir serviço
+                                  </button>
+                                </div>
+                              )}
 
                               <div className="mt-3 grid grid-cols-2 gap-2">
                                 <button

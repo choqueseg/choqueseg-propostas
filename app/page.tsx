@@ -38,8 +38,11 @@ type PerfilUsuario =
   | "funcionario"; // compatibilidade com sessões antigas
 
 type UsuarioLogado = {
+  id?: string;
   nome: string;
   perfil: PerfilUsuario;
+  cargo?: string;
+  permissoes?: string[];
 };
 
 type ConviteUsuario = {
@@ -62,11 +65,19 @@ const PERMISSOES_SISTEMA = [
   { id: "treinamentos", nome: "Treinamentos" },
   { id: "propostas", nome: "Propostas" },
   { id: "orcamento-rapido", nome: "Orçamentos Rápidos" },
+  { id: "historico-propostas", nome: "Histórico de Propostas" },
+  { id: "avaliacoes", nome: "Avaliações Google" },
+  { id: "recibos", nome: "Recibos" },
   { id: "contratos", nome: "Contratos" },
   { id: "engenharia", nome: "Projetos / Engenharia" },
   { id: "financeiro", nome: "Financeiro" },
   { id: "estoque", nome: "Estoque" },
   { id: "funcionarios", nome: "Funcionários" },
+  { id: "convidar", nome: "Convidar Usuários" },
+  { id: "senhas", nome: "Senhas" },
+  { id: "sala-ia", nome: "Sala IA" },
+  { id: "projetos3d", nome: "Projeto 3D" },
+  { id: "configuracoes", nome: "Configurações da Empresa" },
 ] as const;
 
 function perfilPorFuncao(funcao: string): PerfilUsuario {
@@ -474,6 +485,7 @@ export default function Home() {
           senha_temporaria: false,
           perfil,
           especialidade: "Geral",
+          permissoes: conviteAberto.permissoes ?? [],
           status: "Ativo",
           data_admissao: new Date().toISOString().slice(0, 10),
         });
@@ -493,6 +505,8 @@ export default function Home() {
       const sessao: UsuarioLogado = {
         nome: conviteAberto.nome.trim(),
         perfil,
+        cargo: conviteAberto.funcao.trim(),
+        permissoes: conviteAberto.permissoes ?? [],
       };
 
       localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
@@ -545,7 +559,7 @@ export default function Home() {
     try {
       const { data: funcionarioNuvem, error } = await supabase
         .from("funcionarios")
-        .select("id,nome,usuario,senha,perfil,status,senha_temporaria")
+        .select("id,nome,usuario,senha,perfil,cargo,permissoes,status,senha_temporaria")
         .ilike("usuario", usuarioDigitado)
         .eq("senha", senha)
         .maybeSingle();
@@ -581,8 +595,13 @@ export default function Home() {
         }
 
         const sessao: UsuarioLogado = {
+          id: String(funcionarioNuvem.id),
           nome: funcionarioNuvem.nome,
           perfil: perfilFuncionario,
+          cargo: String(funcionarioNuvem.cargo ?? ""),
+          permissoes: Array.isArray(funcionarioNuvem.permissoes)
+            ? funcionarioNuvem.permissoes.map(String)
+            : [],
         };
 
         localStorage.setItem(CHAVE_SESSAO, JSON.stringify(sessao));
@@ -1018,6 +1037,30 @@ export default function Home() {
     );
   }
 
+  function temPermissao(permissao: string) {
+    if (usuarioLogado.perfil === "administrador") return true;
+    return (usuarioLogado.permissoes ?? []).includes(permissao);
+  }
+
+  function permissaoDaTela(tela: TelaSistema): string {
+    if (
+      tela === "energia-solar" ||
+      tela === "seguranca-eletronica" ||
+      tela === "eletrica" ||
+      tela === "automacao" ||
+      tela === "cadastro-produtos"
+    ) {
+      return "propostas";
+    }
+
+    return tela;
+  }
+
+  function podeAcessarTela(tela: TelaSistema) {
+    if (usuarioLogado.perfil === "administrador") return true;
+    return temPermissao(permissaoDaTela(tela));
+  }
+
   const ehAdministrador = usuarioLogado.perfil === "administrador";
   const ehVendedor = usuarioLogado.perfil === "vendedor";
   const ehAtendente = usuarioLogado.perfil === "atendente";
@@ -1025,12 +1068,27 @@ export default function Home() {
     usuarioLogado.perfil === "tecnico" ||
     usuarioLogado.perfil === "funcionario";
 
-  const podeClientes = ehAdministrador || ehVendedor || ehAtendente;
-  const podeFunil = ehAdministrador || ehVendedor || ehAtendente;
-  const podePropostas = ehAdministrador || ehVendedor;
-  const podeOrcamentoRapido = ehAdministrador || ehVendedor;
-  const podeAvaliacoes = ehAdministrador || ehVendedor;
-  const podeAgenda = ehAdministrador || ehVendedor || ehAtendente || ehTecnico;
+  const podeClientes = temPermissao("clientes");
+  const podeFunil = temPermissao("funil");
+  const podePropostas = temPermissao("propostas");
+  const podeOrcamentoRapido = temPermissao("orcamento-rapido");
+  const podeAvaliacoes = temPermissao("avaliacoes");
+  const podeAgenda = temPermissao("agenda");
+  const podeDashboard = temPermissao("dashboard");
+  const podeFinanceiro = temPermissao("financeiro");
+  const podeRecibos = temPermissao("recibos");
+  const podeEstoque = temPermissao("estoque");
+  const podeFuncionarios = temPermissao("funcionarios");
+  const podeConvidar = temPermissao("convidar");
+  const podeSenhas = temPermissao("senhas");
+  const podeVistorias = temPermissao("vistorias");
+  const podeEngenharia = temPermissao("engenharia");
+  const podeTreinamentos = temPermissao("treinamentos");
+  const podeContratos = temPermissao("contratos");
+  const podeSalaIA = temPermissao("sala-ia");
+  const podeProjetos3D = temPermissao("projetos3d");
+  const podeConfiguracoes = temPermissao("configuracoes");
+  const podeHistoricoPropostas = temPermissao("historico-propostas") || podePropostas;
 
   // AgendaModule ainda trabalha com administrador/funcionario.
   // Vendedor e atendente precisam poder criar e gerenciar agendamentos.
@@ -1174,7 +1232,7 @@ export default function Home() {
         {menuTopoAberto && (
           <div className="tema-topo border-t border-yellow-400/20 bg-black/95 px-3 py-3 backdrop-blur">
             <div className="grid grid-cols-2 gap-2">
-              {itensMenuDoPerfil(usuarioLogado.perfil, ordemMenu).map((item) => (
+              {itensMenuDoPerfil(usuarioLogado.perfil, ordemMenu, usuarioLogado.permissoes ?? []).map((item) => (
                 <button
                   key={`menu-topo-${item.tela}`}
                   type="button"
@@ -1200,6 +1258,7 @@ export default function Home() {
             telaAtual={telaAtual}
             alterarTela={setTelaAtual}
             perfil={usuarioLogado.perfil}
+            permissoes={usuarioLogado.permissoes ?? []}
             ordemMenu={ordemMenu}
             salvarOrdemMenu={salvarOrdemMenu}
           />
@@ -1234,7 +1293,7 @@ export default function Home() {
             </div>
           )}
 
-          {telaAtual === "dashboard" && ehAdministrador && (
+          {telaAtual === "dashboard" && podeDashboard && (
             <DashboardModule
               alterarTela={setTelaAtual}
               abrirOrcamentoRapido={abrirOrcamentoRapido}
@@ -1259,62 +1318,62 @@ export default function Home() {
             />
           )}
 
-          {telaAtual === "financeiro" && ehAdministrador && (
+          {telaAtual === "financeiro" && podeFinanceiro && (
             <FinanceiroModule usuarioNome={usuarioLogado.nome} />
           )}
 
-          {telaAtual === "recibos" && ehAdministrador && (
+          {telaAtual === "recibos" && podeRecibos && (
             <RecibosModule />
           )}
 
-          {telaAtual === "estoque" && ehAdministrador && (
+          {telaAtual === "estoque" && podeEstoque && (
             <EstoqueModule />
           )}
 
-          {telaAtual === "funcionarios" && ehAdministrador && (
+          {telaAtual === "funcionarios" && podeFuncionarios && (
             <FuncionariosModule />
           )}
 
-          {telaAtual === "convidar" && ehAdministrador && (
+          {telaAtual === "convidar" && podeConvidar && (
             <ConvidarUsuariosModule />
           )}
 
-          {telaAtual === "senhas" && ehAdministrador && (
+          {telaAtual === "senhas" && podeSenhas && (
             <SenhasModule />
           )}
 
-          {telaAtual === "vistorias" && ehAdministrador && (
+          {telaAtual === "vistorias" && podeVistorias && (
             <VistoriasModule
               usuarioNome={usuarioLogado.nome}
               perfil={usuarioLogado.perfil}
             />
           )}
 
-          {telaAtual === "engenharia" && ehAdministrador && (
+          {telaAtual === "engenharia" && podeEngenharia && (
             <EngenhariaModule />
           )}
 
-          {telaAtual === "treinamentos" && ehAdministrador && (
+          {telaAtual === "treinamentos" && podeTreinamentos && (
             <TreinamentosModule
               usuarioNome={usuarioLogado.nome}
               perfil={usuarioLogado.perfil}
             />
           )}
 
-          {telaAtual === "contratos" && ehAdministrador && (
+          {telaAtual === "contratos" && podeContratos && (
             <ContratosModule />
           )}
 
-          {telaAtual === "sala-ia" && ehAdministrador && (
+          {telaAtual === "sala-ia" && podeSalaIA && (
             <SalaIAModule />
           )}
 
-          {telaAtual === "projetos3d" && ehAdministrador && (
+          {telaAtual === "projetos3d" && podeProjetos3D && (
             <Projetos3DModule
               aoSair={() => setTelaAtual("dashboard")}
             />
           )}
-{telaAtual === "configuracoes" && ehAdministrador && (
+{telaAtual === "configuracoes" && podeConfiguracoes && (
   <ConfigEmpresaModule />
 )}
           {telaAtual === "avaliacoes" && podeAvaliacoes && (
@@ -1345,7 +1404,7 @@ export default function Home() {
             </>
           )}
 
-          {telaAtual === "historico-propostas" && podePropostas && (
+          {telaAtual === "historico-propostas" && podeHistoricoPropostas && (
             <ModuloComVoltar voltar={() => setTelaAtual("propostas")}>
               <HistoricoPropostas aoAbrirProposta={abrirPropostaDoHistorico} />
             </ModuloComVoltar>
@@ -1377,7 +1436,7 @@ export default function Home() {
           )}
 
           {telaAtual === "cadastro-produtos" &&
-            ehAdministrador && (
+            podePropostas && (
               <ModuloComVoltar
                 voltar={() => setTelaAtual("propostas")}
               >
@@ -1450,15 +1509,23 @@ const ITENS_TECNICO: ItemMenu[] = [
 function itensMenuDoPerfil(
   perfil: PerfilUsuario,
   ordemMenu: TelaSistema[],
+  permissoes: string[] = [],
 ): ItemMenu[] {
   const base =
     perfil === "administrador"
       ? ITENS_ADMINISTRADOR
-      : perfil === "vendedor"
-        ? ITENS_VENDEDOR
-        : perfil === "atendente"
-          ? ITENS_ATENDENTE
-          : ITENS_TECNICO;
+      : ITENS_ADMINISTRADOR.filter((item) => {
+          const permissao =
+            item.tela === "energia-solar" ||
+            item.tela === "seguranca-eletronica" ||
+            item.tela === "eletrica" ||
+            item.tela === "automacao" ||
+            item.tela === "cadastro-produtos"
+              ? "propostas"
+              : item.tela;
+
+          return permissoes.includes(permissao);
+        });
 
   const mapa = new Map(base.map((item) => [item.tela, item]));
 
@@ -1494,17 +1561,19 @@ function MenuLateral({
   telaAtual,
   alterarTela,
   perfil,
+  permissoes,
   ordemMenu,
   salvarOrdemMenu,
 }: {
   telaAtual: TelaSistema;
   alterarTela: (tela: TelaSistema) => void;
   perfil: PerfilUsuario;
+  permissoes: string[];
   ordemMenu: TelaSistema[];
   salvarOrdemMenu: (ordem: TelaSistema[]) => void;
 }) {
   const [organizando, setOrganizando] = useState(false);
-  const itens = itensMenuDoPerfil(perfil, ordemMenu);
+  const itens = itensMenuDoPerfil(perfil, ordemMenu, permissoes);
   const podeOrganizar = perfil === "administrador";
 
   return (
@@ -1588,17 +1657,19 @@ function MenuMobile({
   telaAtual,
   alterarTela,
   perfil,
+  permissoes,
   ordemMenu,
   salvarOrdemMenu,
 }: {
   telaAtual: TelaSistema;
   alterarTela: (tela: TelaSistema) => void;
   perfil: PerfilUsuario;
+  permissoes: string[];
   ordemMenu: TelaSistema[];
   salvarOrdemMenu: (ordem: TelaSistema[]) => void;
 }) {
   const [organizando, setOrganizando] = useState(false);
-  const itens = itensMenuDoPerfil(perfil, ordemMenu);
+  const itens = itensMenuDoPerfil(perfil, ordemMenu, permissoes);
   const podeOrganizar = perfil === "administrador";
 
   if (organizando && podeOrganizar) {
@@ -2053,6 +2124,23 @@ function ConvidarUsuariosModule() {
             <h3 className="font-black uppercase text-yellow-400">
               Permissões
             </h3>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setPermissoes(PERMISSOES_SISTEMA.map((item) => item.id))}
+                className="rounded-lg border border-yellow-400/50 px-3 py-2 text-xs font-black uppercase text-yellow-400"
+              >
+                Selecionar tudo
+              </button>
+              <button
+                type="button"
+                onClick={() => setPermissoes([])}
+                className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-black uppercase text-zinc-300"
+              >
+                Limpar tudo
+              </button>
+            </div>
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {PERMISSOES_SISTEMA.map((item) => (

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import html2canvas from "html2canvas-pro";
 import jsPDF from "jspdf";
-import { produtosIniciais } from "@/components/produtos";
 import { createClient } from "@/utils/supabase/client";
 
 type Cliente = {
@@ -12,6 +11,18 @@ type Cliente = {
   telefone: string;
   cidade: string;
   endereco: string;
+};
+
+type ProdutoOrcamento = {
+  id: string;
+  nome: string;
+  fabricante: string;
+  modelo: string;
+  categoria: string;
+  segmento: string;
+  unidade: string;
+  valorVenda: number;
+  ativo: boolean;
 };
 
 type ItemOrcamento = {
@@ -129,6 +140,18 @@ function inferirUnidade(nome: string) {
   return "Unidade";
 }
 
+function segmentoDoTipo(tipo: TipoOrcamentoRapido) {
+  if (tipo === "seguranca-eletronica") return "Segurança eletrônica";
+  if (tipo === "eletrica") return "Elétrica";
+  return "Casa inteligente";
+}
+
+function categoriaEstoqueDoTipo(tipo: TipoOrcamentoRapido) {
+  if (tipo === "eletrica") return "Proteção elétrica";
+  if (tipo === "automacao") return "Automação";
+  return "Outros";
+}
+
 function novoItem(): ItemOrcamento {
   return {
     id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `item-${Date.now()}-${Math.random()}`,
@@ -146,36 +169,40 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
   const [subservico, setSubservico] = useState(SUBSERVICOS[tipo][0]);
   const [modoComposicao, setModoComposicao] = useState<ModoComposicao>("material-instalacao");
   const [buscaProduto, setBuscaProduto] = useState("");
+  const [produtoSelecionadoId, setProdutoSelecionadoId] = useState("");
+  const [produtosCatalogo, setProdutosCatalogo] = useState<ProdutoOrcamento[]>([]);
+  const [carregandoProdutos, setCarregandoProdutos] = useState(true);
+  const [cadastroProdutoAberto, setCadastroProdutoAberto] = useState(false);
+  const [novoProdutoNome, setNovoProdutoNome] = useState("");
+  const [novoProdutoFabricante, setNovoProdutoFabricante] = useState("");
+  const [novoProdutoModelo, setNovoProdutoModelo] = useState("");
+  const [novoProdutoUnidade, setNovoProdutoUnidade] = useState("Unidade");
+  const [novoProdutoCusto, setNovoProdutoCusto] = useState("");
+  const [novoProdutoVenda, setNovoProdutoVenda] = useState("");
+  const [salvandoProduto, setSalvandoProduto] = useState(false);
+  const [produtoParaExcluirId, setProdutoParaExcluirId] = useState("");
+  const [excluindoProduto, setExcluindoProduto] = useState(false);
 
   const produtosCategoria = useMemo(() => {
     const termo = buscaProduto.trim().toLowerCase();
-    return produtosIniciais
+    const segmentoAtual = segmentoDoTipo(tipo).toLowerCase();
+
+    return produtosCatalogo
       .filter((produto) => {
         if (!produto.ativo) return false;
-        const ehMaoDeObra = produto.categoria === "Mão de Obra";
-        if (modoComposicao === "somente-instalacao" && !ehMaoDeObra) return false;
-        if (modoComposicao === "somente-material" && ehMaoDeObra) return false;
+        if (produto.segmento.trim().toLowerCase() !== segmentoAtual) return false;
+        if (modoComposicao === "somente-instalacao") return false;
 
-        const mesmoGrupo =
-          produto.subcategoria === subservico ||
-          (tipo === "eletrica" && produto.categoria === "Elétrica" && subservico === "Elétrica Geral");
-
-        if (!mesmoGrupo) return false;
         if (!termo) return true;
 
-        const texto = [
-          produto.nome,
-          produto.descricao,
-          produto.marca ?? "",
-          produto.subcategoria ?? "",
-          ...(produto.termosBusca ?? []),
-        ]
+        return [produto.nome, produto.fabricante, produto.modelo, produto.categoria]
           .join(" ")
-          .toLowerCase();
-        return texto.includes(termo);
+          .toLowerCase()
+          .includes(termo);
       })
       .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [tipo, subservico, modoComposicao, buscaProduto]);
+  }, [produtosCatalogo, tipo, modoComposicao, buscaProduto]);
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState("");
   const [modoCliente, setModoCliente] = useState<ModoCliente>("cadastrado");
@@ -202,6 +229,58 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
   const [previewPdfBlob, setPreviewPdfBlob] = useState<Blob | null>(null);
   const [previewAberto, setPreviewAberto] = useState(false);
   const [mensagemAberta, setMensagemAberta] = useState(false);
+
+  useEffect(() => {
+    let ativo = true;
+
+    async function carregarProdutosCatalogo() {
+      setCarregandoProdutos(true);
+      const { data, error } = await supabase
+        .from("estoque_produtos")
+        .select("id,nome,categoria,fabricante,modelo,unidade,valor_venda,segmento,ativo")
+        .order("nome", { ascending: true });
+
+      if (!ativo) return;
+
+      if (error) {
+        console.error("Erro ao carregar catálogo do orçamento:", error);
+        setErro(`Não foi possível carregar os produtos cadastrados: ${error.message}`);
+        setCarregandoProdutos(false);
+        return;
+      }
+
+      setProdutosCatalogo(
+        (data ?? []).map((produto: any) => ({
+          id: String(produto.id),
+          nome: String(produto.nome ?? ""),
+          fabricante: String(produto.fabricante ?? ""),
+          modelo: String(produto.modelo ?? ""),
+          categoria: String(produto.categoria ?? ""),
+          segmento: String(produto.segmento ?? ""),
+          unidade: String(produto.unidade ?? "Unidade"),
+          valorVenda: Number(produto.valor_venda ?? 0),
+          ativo: produto.ativo ?? true,
+        })),
+      );
+      setCarregandoProdutos(false);
+    }
+
+    void carregarProdutosCatalogo();
+
+    const canal = supabase
+      .channel(`orcamento-produtos-${tipo}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "estoque_produtos" },
+        () => void carregarProdutosCatalogo(),
+      )
+      .subscribe();
+
+    return () => {
+      ativo = false;
+      void supabase.removeChannel(canal);
+    };
+  }, [tipo]);
 
   useEffect(() => {
     async function carregarClientes() {
@@ -236,6 +315,8 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
     setItens([novoItem()]);
     setSubservico(SUBSERVICOS[tipo][0]);
     setBuscaProduto("");
+    setProdutoSelecionadoId("");
+    setProdutoParaExcluirId("");
   }, [tipo]);
 
   const subtotalMateriais = useMemo(
@@ -380,10 +461,137 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
           descricao: produto.nome,
           unidade: produto.unidade || inferirUnidade(produto.nome),
           valorUnitario: Number(produto.valorVenda || 0),
-          natureza: produto.categoria === "Mão de Obra" ? "mao_obra" : "material",
+          natureza: "material",
         };
       }),
     );
+  }
+
+  async function cadastrarNovoProdutoRapido() {
+    const nomeProduto = novoProdutoNome.trim();
+    if (!nomeProduto) {
+      alert("Informe o nome do produto.");
+      return;
+    }
+
+    const custo = Number(novoProdutoCusto.replace(",", ".")) || 0;
+    const venda = Number(novoProdutoVenda.replace(",", ".")) || 0;
+    if (custo < 0 || venda < 0) {
+      alert("Custo e valor de venda não podem ser negativos.");
+      return;
+    }
+
+    setSalvandoProduto(true);
+    const id = crypto.randomUUID();
+    const segmento = segmentoDoTipo(tipo);
+    const categoria = categoriaEstoqueDoTipo(tipo);
+
+    const { data, error } = await supabase
+      .from("estoque_produtos")
+      .insert({
+        id,
+        nome: nomeProduto,
+        categoria,
+        segmento,
+        fabricante: novoProdutoFabricante.trim() || null,
+        modelo: novoProdutoModelo.trim() || null,
+        unidade: novoProdutoUnidade,
+        quantidade_atual: 0,
+        estoque_minimo: 0,
+        custo_unitario: custo,
+        valor_venda: venda,
+        ativo: true,
+        criado_em: new Date().toISOString(),
+        atualizado_em: new Date().toISOString(),
+      })
+      .select("id,nome,categoria,fabricante,modelo,unidade,valor_venda,segmento,ativo")
+      .single();
+
+    setSalvandoProduto(false);
+
+    if (error) {
+      console.error("Erro ao cadastrar produto pelo orçamento:", error);
+      alert(`Não foi possível cadastrar o produto: ${error.message}`);
+      return;
+    }
+
+    const produtoCriado: ProdutoOrcamento = {
+      id: String(data.id),
+      nome: String(data.nome ?? nomeProduto),
+      fabricante: String(data.fabricante ?? ""),
+      modelo: String(data.modelo ?? ""),
+      categoria: String(data.categoria ?? categoria),
+      segmento: String(data.segmento ?? segmento),
+      unidade: String(data.unidade ?? novoProdutoUnidade),
+      valorVenda: Number(data.valor_venda ?? venda),
+      ativo: data.ativo ?? true,
+    };
+
+    setProdutosCatalogo((atuais) =>
+      [...atuais.filter((item) => item.id !== produtoCriado.id), produtoCriado].sort((a, b) =>
+        a.nome.localeCompare(b.nome),
+      ),
+    );
+    setBuscaProduto(nomeProduto);
+    setProdutoSelecionadoId(produtoCriado.id);
+    setNovoProdutoNome("");
+    setNovoProdutoFabricante("");
+    setNovoProdutoModelo("");
+    setNovoProdutoUnidade("Unidade");
+    setNovoProdutoCusto("");
+    setNovoProdutoVenda("");
+    setCadastroProdutoAberto(false);
+    alert("Produto cadastrado na nuvem e disponível no orçamento.");
+  }
+
+  async function excluirProdutoDoCatalogo() {
+    if (!produtoParaExcluirId) {
+      alert("Selecione um produto para excluir.");
+      return;
+    }
+
+    const produto = produtosCatalogo.find((item) => item.id === produtoParaExcluirId);
+    if (!produto) {
+      alert("Produto não encontrado.");
+      return;
+    }
+
+    const confirmar = window.confirm(
+      `Excluir "${produto.nome}" do catálogo?\n\nEle deixará de aparecer nos próximos orçamentos.`
+    );
+    if (!confirmar) return;
+
+    setExcluindoProduto(true);
+
+    const { error } = await supabase
+      .from("estoque_produtos")
+      .delete()
+      .eq("id", produtoParaExcluirId);
+
+    setExcluindoProduto(false);
+
+    if (error) {
+      console.error("Erro ao excluir produto:", error);
+      alert(`Não foi possível excluir o produto: ${error.message}`);
+      return;
+    }
+
+    setProdutosCatalogo((atuais) =>
+      atuais.filter((item) => item.id !== produtoParaExcluirId)
+    );
+
+    // Se o produto já estiver usado no orçamento atual, mantém a descrição/valor
+    // e transforma o item em manual para não perder o orçamento.
+    setItens((atuais) =>
+      atuais.map((item) =>
+        item.produtoId === produtoParaExcluirId
+          ? { ...item, produtoId: "" }
+          : item
+      )
+    );
+
+    setProdutoParaExcluirId("");
+    alert("Produto excluído do catálogo.");
   }
 
   function adicionarItem() {
@@ -766,6 +974,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                   onChange={(e) => {
                     setSubservico(e.target.value);
                     setBuscaProduto("");
+                    setProdutoSelecionadoId("");
                     setItens([novoItem()]);
                   }}
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"
@@ -780,6 +989,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                   value={modoComposicao}
                   onChange={(e) => {
                     setModoComposicao(e.target.value as ModoComposicao);
+                    setProdutoSelecionadoId("");
                     setItens([novoItem()]);
                   }}
                   className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"
@@ -795,23 +1005,75 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Buscar material / modelo / marca</span>
               <input
                 value={buscaProduto}
-                onChange={(e) => setBuscaProduto(e.target.value)}
+                onChange={(e) => {
+                  setBuscaProduto(e.target.value);
+                  setProdutoSelecionadoId("");
+                }}
                 placeholder="Ex.: FD 1000, Rossi Nitro, PPA JetFlex, câmera IP..."
                 className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"
               />
+              {buscaProduto.trim() && (
+                <span className="mt-2 block text-xs font-bold text-zinc-400">
+                  {produtosCategoria.length > 0
+                    ? `${produtosCategoria.length} item(ns) encontrado(s) neste segmento.`
+                    : "Nenhum material encontrado neste segmento. Confira o nome, modelo ou marca cadastrada."}
+                </span>
+              )}
             </label>
           </section>
 
+
           <section className="rounded-2xl border border-zinc-700 p-3 md:p-4">
-            <div className="mb-3"><h3 className="font-black uppercase text-yellow-500">Itens do orçamento</h3><p className="text-xs text-zinc-500">Use os equipamentos pré-programados das propostas ou digite um item manualmente.</p></div>
+            <div className="mb-3"><h3 className="font-black uppercase text-yellow-500">Itens do orçamento</h3><p className="text-xs text-zinc-500">Escolha um produto cadastrado no catálogo ou digite um item manual.</p>{carregandoProdutos && <p className="mt-1 text-xs font-bold text-yellow-400">Carregando produtos da nuvem...</p>}</div>
+
+            <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-3">
+              <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-black uppercase text-white">Catálogo do segmento: {segmentoDoTipo(tipo)}</p>
+                  <p className="mt-1 text-xs text-zinc-500">Os equipamentos pré-cadastrados continuam disponíveis. Você também pode cadastrar novos ou excluir um item cadastrado incorretamente.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCadastroProdutoAberto(true)}
+                  className="shrink-0 rounded-lg bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black"
+                >
+                  + Cadastrar novo produto
+                </button>
+              </div>
+
+              <div className="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_170px]">
+                <select
+                  value={produtoParaExcluirId}
+                  onChange={(e) => setProdutoParaExcluirId(e.target.value)}
+                  className="w-full min-w-0 rounded-lg border border-zinc-700 bg-black px-3 py-3 text-sm text-white outline-none focus:border-yellow-400"
+                >
+                  <option value="">Selecione um produto para gerenciar/excluir</option>
+                  {produtosCategoria.map((produto) => (
+                    <option key={produto.id} value={produto.id}>
+                      {produto.nome}{produto.fabricante ? ` — ${produto.fabricante}` : ""}{produto.modelo ? ` — ${produto.modelo}` : ""}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  type="button"
+                  onClick={() => void excluirProdutoDoCatalogo()}
+                  disabled={!produtoParaExcluirId || excluindoProduto}
+                  className="rounded-lg border border-red-500/60 px-4 py-3 text-sm font-black uppercase text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {excluindoProduto ? "Excluindo..." : "🗑 Excluir produto"}
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-3">
               {itens.map((item, indice) => (
                 <div key={item.id} className="rounded-xl border border-zinc-700 bg-zinc-950 p-3">
                   <div className="mb-2 grid gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                    <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Material / serviço pré-cadastrado</span><select value={item.produtoId} onChange={(e) => selecionarProduto(item.id, e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-sm text-white outline-none focus:border-yellow-400"><option value="">Item manual</option>{produtosCategoria.map((produto) => <option key={produto.id} value={produto.id}>{produto.nome}</option>)}</select></label>
+                    <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Material / serviço pré-cadastrado</span><select value={item.produtoId} onChange={(e) => selecionarProduto(item.id, e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-sm text-white outline-none focus:border-yellow-400"><option value="">Item manual</option>{produtosCategoria.map((produto) => <option key={produto.id} value={produto.id}>{produto.nome}{produto.fabricante ? ` — ${produto.fabricante}` : ""}{produto.modelo ? ` — ${produto.modelo}` : ""}</option>)}</select></label>
                     <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Descrição</span><input value={item.descricao} onChange={(e) => atualizarItem(item.id, "descricao", e.target.value)} placeholder={`Item ${indice + 1}`} className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" /></label>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-[130px_120px_90px_150px_minmax(120px,1fr)_42px] sm:items-end">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(110px,1.05fr)_minmax(100px,.9fr)_minmax(70px,.6fr)_minmax(120px,1fr)_minmax(120px,1fr)_42px] md:items-end">
                     <label>
                       <span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Tipo</span>
                       <select
@@ -999,6 +1261,34 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                     </button>
                   </div>
                 </aside>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {cadastroProdutoAberto && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 p-3">
+            <div className="w-full max-w-2xl rounded-2xl border border-yellow-400/40 bg-zinc-950 p-4 shadow-2xl md:p-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-black uppercase text-yellow-400">Cadastrar novo produto</h3>
+                  <p className="mt-1 text-sm text-zinc-500">Segmento definido automaticamente: {segmentoDoTipo(tipo)}.</p>
+                </div>
+                <button type="button" onClick={() => setCadastroProdutoAberto(false)} className="rounded-lg border border-zinc-700 px-3 py-2 font-black text-white">✕</button>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <Campo titulo="Nome do produto" valor={novoProdutoNome} aoAlterar={setNovoProdutoNome} />
+                <Campo titulo="Fabricante / marca" valor={novoProdutoFabricante} aoAlterar={setNovoProdutoFabricante} />
+                <Campo titulo="Modelo" valor={novoProdutoModelo} aoAlterar={setNovoProdutoModelo} />
+                <label className="block"><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Unidade</span><select value={novoProdutoUnidade} onChange={(e) => setNovoProdutoUnidade(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"><option>Unidade</option><option>Metro</option><option>Rolo</option><option>Caixa</option><option>Kit</option><option>Par</option></select></label>
+                <Campo titulo="Custo unitário" valor={novoProdutoCusto} aoAlterar={setNovoProdutoCusto} tipo="number" />
+                <Campo titulo="Valor de venda" valor={novoProdutoVenda} aoAlterar={setNovoProdutoVenda} tipo="number" />
+              </div>
+
+              <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                <button type="button" onClick={() => setCadastroProdutoAberto(false)} className="rounded-xl border border-zinc-700 px-4 py-3 font-black uppercase text-zinc-300">Cancelar</button>
+                <button type="button" disabled={salvandoProduto} onClick={() => void cadastrarNovoProdutoRapido()} className="rounded-xl bg-yellow-400 px-4 py-3 font-black uppercase text-black disabled:opacity-50">{salvandoProduto ? "Salvando..." : "Salvar no catálogo"}</button>
               </div>
             </div>
           </div>

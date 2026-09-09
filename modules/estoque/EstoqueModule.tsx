@@ -163,6 +163,7 @@ export default function EstoqueModule() {
   const [quantidadeAtual, setQuantidadeAtual] = useState("");
   const [estoqueMinimo, setEstoqueMinimo] = useState("3");
   const [custoUnitario, setCustoUnitario] = useState("");
+  const [valorVenda, setValorVenda] = useState("");
   const [fornecedor, setFornecedor] = useState("");
   const [localArmazenamento, setLocalArmazenamento] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -401,6 +402,7 @@ export default function EstoqueModule() {
     setQuantidadeAtual("");
     setEstoqueMinimo("3");
     setCustoUnitario("");
+    setValorVenda("");
     setFornecedor("");
     setLocalArmazenamento("");
     setObservacao("");
@@ -419,13 +421,14 @@ export default function EstoqueModule() {
     const quantidade = converterNumero(quantidadeAtual);
     const minimo = converterNumero(estoqueMinimo);
     const custo = converterNumero(custoUnitario);
+    const venda = converterNumero(valorVenda);
 
     const nomeFinal =
       produtoCatalogoId === "__outro__" ? produtoManual.trim() : nome.trim();
 
     if (!nomeFinal) return setMensagem("Informe o nome do produto.");
-    if (quantidade < 0 || minimo < 0 || custo < 0)
-      return setMensagem("Quantidade, estoque mínimo e custo não podem ser negativos.");
+    if (quantidade < 0 || minimo < 0 || custo < 0 || venda < 0)
+      return setMensagem("Quantidade, estoque mínimo, custo e valor de venda não podem ser negativos.");
 
     const novoProduto: ProdutoEstoque = {
       id: crypto.randomUUID(),
@@ -451,7 +454,11 @@ export default function EstoqueModule() {
 
     const { error } = await supabase
       .from("estoque_produtos")
-      .insert(produtoAppParaBanco(novoProduto));
+      .insert({
+        ...produtoAppParaBanco(novoProduto),
+        segmento: categoriaNegocio,
+        valor_venda: venda,
+      });
 
     if (error) {
       setMensagem(`Erro ao cadastrar produto: ${error.message}`);
@@ -680,7 +687,7 @@ export default function EstoqueModule() {
                 Cadastrar produto
               </h3>
               <p className="mt-1 text-sm text-zinc-500">
-                Cadastro enxuto: categoria, produto, fabricante, modelo, unidade, saldo, custo, fornecedor e observação.
+                Cadastro integrado: segmento, produto, fabricante, modelo, unidade, saldo, custo, valor de venda, fornecedor e observação.
               </p>
             </div>
 
@@ -760,6 +767,13 @@ export default function EstoqueModule() {
                 valor={custoUnitario}
                 onChange={setCustoUnitario}
                 placeholder="Quanto você pagou"
+              />
+
+              <CampoTexto
+                label="Valor de venda"
+                valor={valorVenda}
+                onChange={setValorVenda}
+                placeholder="Quanto será cobrado no orçamento"
               />
 
               <CampoSelect

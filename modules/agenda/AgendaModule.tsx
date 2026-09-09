@@ -43,14 +43,21 @@ export default function AgendaModule({
   const [compromissoResponsavel, setCompromissoResponsavel] = useState(usuarioNome);
   const [compromissoLocal, setCompromissoLocal] = useState("");
   const [compromissoDescricao, setCompromissoDescricao] = useState("");
+  const [compromissoClienteId, setCompromissoClienteId] = useState("");
+  const [modoClienteVisita, setModoClienteVisita] = useState<"cadastrado" | "novo">("cadastrado");
+  const [visitaNovoNome, setVisitaNovoNome] = useState("");
+  const [visitaNovoTelefone, setVisitaNovoTelefone] = useState("");
+  const [visitaNovaCidade, setVisitaNovaCidade] = useState("");
+  const [visitaNovoEndereco, setVisitaNovoEndereco] = useState("");
+  const [visitaNovoTipoServico, setVisitaNovoTipoServico] = useState("");
   const [mensagem, setMensagem] = useState("");
-  const [secaoAtiva, setSecaoAtiva] = useState<"servicos" | "agendar" | "compromisso">("servicos");
+  const [secaoAtiva, setSecaoAtiva] = useState<"servicos" | "agendar" | "visita" | "compromisso">("servicos");
   const [visualizacao, setVisualizacao] = useState<"semana" | "mes" | "lista">("semana");
   const [mostrarDisponibilidade, setMostrarDisponibilidade] = useState(false);
   const [periodoDisponibilidade, setPeriodoDisponibilidade] = useState<"semana" | "mes">("semana");
   const [diaDisponibilidadeSelecionado, setDiaDisponibilidadeSelecionado] = useState<string | null>(null);
   const [filtroAgenda, setFiltroAgenda] = useState<
-    "todos" | "servicos" | "treinamentos" | "reunioes" | "pessoal" | "outros"
+    "todos" | "servicos" | "treinamentos" | "reunioes" | "visitas" | "pessoal" | "outros"
   >("todos");
   const [ouvindoVoz, setOuvindoVoz] = useState(false);
   const [dataReferencia, setDataReferencia] = useState(() => dataLocalISO(new Date()));
@@ -407,7 +414,7 @@ export default function AgendaModule({
   async function carregarCompromissosAgenda() {
     const { data, error } = await supabase
       .from("agenda_compromissos")
-      .select("id,tipo,titulo,data,horario,horario_fim,responsavel,local,descricao,criado_por,criado_em,atualizado_em")
+      .select("id,tipo,titulo,data,horario,horario_fim,responsavel,local,descricao,status,cliente_id,cliente_nome,cliente_telefone,endereco,cidade,concluido_em,concluido_por,criado_por,criado_em,atualizado_em")
       .order("data", { ascending: true })
       .order("horario", { ascending: true });
 
@@ -427,6 +434,14 @@ export default function AgendaModule({
         responsavel: String(item.responsavel ?? ""),
         local: String(item.local ?? ""),
         descricao: String(item.descricao ?? ""),
+        status: String(item.status ?? "Agendado") as CompromissoAgenda["status"],
+        clienteId: item.cliente_id ? String(item.cliente_id) : undefined,
+        clienteNome: String(item.cliente_nome ?? ""),
+        clienteTelefone: String(item.cliente_telefone ?? ""),
+        endereco: String(item.endereco ?? ""),
+        cidade: String(item.cidade ?? ""),
+        concluidoEm: item.concluido_em ? String(item.concluido_em) : undefined,
+        concluidoPor: String(item.concluido_por ?? ""),
         criadoPor: String(item.criado_por ?? ""),
       })),
     );
@@ -652,6 +667,9 @@ export default function AgendaModule({
     if (filtroAgenda === "reunioes") {
       return compromissosVisiveis.filter((item) => item.tipo === "Reunião");
     }
+    if (filtroAgenda === "visitas") {
+      return compromissosVisiveis.filter((item) => item.tipo === "Visita Técnica");
+    }
     if (filtroAgenda === "pessoal") {
       return compromissosVisiveis.filter((item) => item.tipo === "Compromisso pessoal");
     }
@@ -664,7 +682,7 @@ export default function AgendaModule({
   function eventosDetalhadosDoDia(dia: string) {
     const eventos: {
       id: string;
-      categoria: "Serviço" | "Treinamento" | "Reunião" | "Compromisso pessoal" | "Outro";
+      categoria: "Serviço" | "Treinamento" | "Reunião" | "Visita Técnica" | "Compromisso pessoal" | "Outro";
       titulo: string;
       inicio: string;
       fim?: string;
@@ -701,7 +719,7 @@ export default function AgendaModule({
       });
 
     compromissosVisiveis
-      .filter((compromisso) => compromisso.data === dia)
+      .filter((compromisso) => compromisso.data === dia && compromisso.status !== "Concluído")
       .forEach((compromisso) => {
         eventos.push({
           id: `compromisso-${compromisso.id}`,
@@ -736,7 +754,21 @@ export default function AgendaModule({
     setMensagem(`Data ${dia.split("-").reverse().join("/")} selecionada. Informe cliente e horário inicial/final.`);
   }
 
+  function novaVisitaNoDia(dia: string) {
+    setCompromissoTipo("Visita Técnica");
+    setCompromissoData(dia);
+    setCompromissoHorario("");
+    setCompromissoHorarioFim("");
+    setCompromissoClienteId("");
+    setCompromissoTitulo("");
+    setCompromissoLocal("");
+    setCompromissoDescricao("");
+    setSecaoAtiva("visita");
+    setMensagem(`Data ${dia.split("-").reverse().join("/")} selecionada. Informe cliente e horário da visita técnica.`);
+  }
+
   function novoCompromissoNoDia(dia: string) {
+    setCompromissoTipo("Reunião");
     setCompromissoData(dia);
     setCompromissoHorario("");
     setCompromissoHorarioFim("");
@@ -1026,7 +1058,7 @@ export default function AgendaModule({
 
     compromissos.forEach((compromisso) => {
       if (ignorar?.tipo === "compromisso" && ignorar.id === compromisso.id) return;
-      if (compromisso.data !== dataNova) return;
+      if (compromisso.data !== dataNova || compromisso.status === "Concluído") return;
       if (!sobrepoe(compromisso.horario, compromisso.horarioFim)) return;
       conflitos.push({
         tipo: compromisso.tipo,
@@ -1136,41 +1168,155 @@ export default function AgendaModule({
   async function agendarCompromisso(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
     setMensagem("");
-    if (!compromissoTitulo.trim() || !compromissoData || !compromissoHorario || !compromissoHorarioFim) {
-      setMensagem("Preencha título, data, horário inicial e horário final do compromisso.");
+
+    const ehVisitaTecnica = compromissoTipo === "Visita Técnica";
+    let clienteVisita = ehVisitaTecnica
+      ? clientes.find((item) => item.id === compromissoClienteId)
+      : undefined;
+
+    if (ehVisitaTecnica && modoClienteVisita === "novo") {
+      const nomeNovo = visitaNovoNome.trim();
+
+      if (!nomeNovo) {
+        setMensagem("Informe o nome do novo cliente.");
+        return;
+      }
+
+      const novoClienteId = crypto.randomUUID();
+      const novoCliente: Cliente = {
+        id: novoClienteId,
+        nome: nomeNovo,
+        telefone: visitaNovoTelefone.trim(),
+        cidade: visitaNovaCidade.trim(),
+        endereco: visitaNovoEndereco.trim(),
+        tipoServico: visitaNovoTipoServico.trim() || "Visita Técnica",
+      };
+
+      const { error: erroCliente } = await supabase
+        .from("clientes")
+        .insert({
+          id: novoCliente.id,
+          nome: novoCliente.nome,
+          telefone: novoCliente.telefone,
+          cidade: novoCliente.cidade,
+          endereco: novoCliente.endereco,
+          tipo_servico: novoCliente.tipoServico,
+          status: "Novo Contato",
+          origem: "Visita Técnica",
+        });
+
+      if (erroCliente) {
+        console.error("Erro ao cadastrar cliente da visita técnica:", erroCliente);
+        setMensagem(`Não foi possível cadastrar o novo cliente: ${erroCliente.message}`);
+        return;
+      }
+
+      setClientes((atuais) =>
+        [...atuais, novoCliente].sort((a, b) => a.nome.localeCompare(b.nome)),
+      );
+      setCompromissoClienteId(novoCliente.id);
+      clienteVisita = novoCliente;
+    }
+
+    const tituloFinal = ehVisitaTecnica
+      ? `Visita técnica — ${clienteVisita?.nome ?? ""}`.trim()
+      : compromissoTitulo.trim();
+
+    const localFinal = ehVisitaTecnica
+      ? [clienteVisita?.endereco, clienteVisita?.cidade].filter(Boolean).join(", ")
+      : compromissoLocal.trim();
+
+    if (ehVisitaTecnica && !clienteVisita) {
+      setMensagem("Selecione um cliente cadastrado ou informe um novo cliente.");
       return;
     }
+
+    if (!tituloFinal || !compromissoData || !compromissoHorario || !compromissoHorarioFim) {
+      setMensagem("Preencha título/cliente, data, horário inicial e horário final do compromisso.");
+      return;
+    }
+
     if (normalizarHorario(compromissoHorarioFim) <= normalizarHorario(compromissoHorario)) {
       setMensagem("O horário final deve ser maior que o horário inicial.");
       return;
     }
-    const conflitos = encontrarConflitosAgenda(compromissoData, compromissoHorario, compromissoHorarioFim);
+
+    const conflitos = encontrarConflitosAgenda(
+      compromissoData,
+      compromissoHorario,
+      compromissoHorarioFim,
+    );
+
     if (!confirmarConflitos(conflitos, compromissoHorario, compromissoHorarioFim)) {
       setMensagem("Compromisso não salvo porque existe conflito de horário.");
       return;
     }
 
     const novo: CompromissoAgenda = {
-      id: crypto.randomUUID(), tipo: compromissoTipo, titulo: compromissoTitulo.trim(),
-      data: compromissoData, horario: compromissoHorario, horarioFim: compromissoHorarioFim,
+      id: crypto.randomUUID(),
+      tipo: compromissoTipo,
+      titulo: tituloFinal,
+      data: compromissoData,
+      horario: compromissoHorario,
+      horarioFim: compromissoHorarioFim,
       responsavel: compromissoResponsavel.trim() || usuarioNome,
-      local: compromissoLocal.trim(), descricao: compromissoDescricao.trim(), criadoPor: usuarioNome,
+      local: localFinal,
+      descricao: compromissoDescricao.trim(),
+      status: "Agendado",
+      clienteId: clienteVisita?.id,
+      clienteNome: clienteVisita?.nome,
+      clienteTelefone: clienteVisita?.telefone,
+      endereco: clienteVisita?.endereco,
+      cidade: clienteVisita?.cidade,
+      criadoPor: usuarioNome,
     };
+
     const { error } = await supabase.from("agenda_compromissos").insert({
-      id: novo.id, tipo: novo.tipo, titulo: novo.titulo, data: novo.data,
-      horario: novo.horario, horario_fim: novo.horarioFim,
-      responsavel: novo.responsavel, local: novo.local, descricao: novo.descricao,
-      criado_por: usuarioNome, atualizado_em: new Date().toISOString(),
+      id: novo.id,
+      tipo: novo.tipo,
+      titulo: novo.titulo,
+      data: novo.data,
+      horario: novo.horario,
+      horario_fim: novo.horarioFim,
+      responsavel: novo.responsavel,
+      local: novo.local,
+      descricao: novo.descricao,
+      status: novo.status,
+      cliente_id: novo.clienteId ?? null,
+      cliente_nome: novo.clienteNome ?? null,
+      cliente_telefone: novo.clienteTelefone ?? null,
+      endereco: novo.endereco ?? null,
+      cidade: novo.cidade ?? null,
+      criado_por: usuarioNome,
+      atualizado_em: new Date().toISOString(),
     });
+
     if (error) {
       console.error("Erro ao criar compromisso:", error);
       setMensagem(`Erro ao criar compromisso: ${error.message}`);
       return;
     }
+
     setCompromissos((atuais) => [...atuais, novo]);
-    setCompromissoTitulo(""); setCompromissoData(""); setCompromissoHorario("");
-    setCompromissoHorarioFim(""); setCompromissoLocal(""); setCompromissoDescricao("");
-    setMensagem("Compromisso salvo na Agenda."); setSecaoAtiva("servicos");
+    setCompromissoTitulo("");
+    setCompromissoClienteId("");
+    setModoClienteVisita("cadastrado");
+    setVisitaNovoNome("");
+    setVisitaNovoTelefone("");
+    setVisitaNovaCidade("");
+    setVisitaNovoEndereco("");
+    setVisitaNovoTipoServico("");
+    setCompromissoData("");
+    setCompromissoHorario("");
+    setCompromissoHorarioFim("");
+    setCompromissoLocal("");
+    setCompromissoDescricao("");
+    setMensagem(
+      ehVisitaTecnica
+        ? "Visita técnica salva na Agenda."
+        : "Compromisso salvo na Agenda.",
+    );
+    setSecaoAtiva("servicos");
   }
 
   async function salvarCompromisso(atualizado: CompromissoAgenda): Promise<boolean> {
@@ -1186,11 +1332,65 @@ export default function AgendaModule({
       tipo: atualizado.tipo, titulo: atualizado.titulo.trim(), data: atualizado.data,
       horario: atualizado.horario, horario_fim: atualizado.horarioFim,
       responsavel: atualizado.responsavel, local: atualizado.local,
-      descricao: atualizado.descricao, atualizado_em: new Date().toISOString(),
+      descricao: atualizado.descricao, status: atualizado.status,
+      cliente_id: atualizado.clienteId ?? null,
+      cliente_nome: atualizado.clienteNome ?? null,
+      cliente_telefone: atualizado.clienteTelefone ?? null,
+      endereco: atualizado.endereco ?? null,
+      cidade: atualizado.cidade ?? null,
+      concluido_em: atualizado.concluidoEm ?? null,
+      concluido_por: atualizado.concluidoPor ?? null,
+      atualizado_em: new Date().toISOString(),
     }).eq("id", atualizado.id);
     if (error) { setMensagem(`Erro ao atualizar compromisso: ${error.message}`); return false; }
     setCompromissos((atuais) => atuais.map((item) => item.id === atualizado.id ? atualizado : item));
     setMensagem("Compromisso atualizado."); return true;
+  }
+
+  async function concluirCompromisso(id: string): Promise<boolean> {
+    if (!ehAdministrador) return false;
+
+    const atual = compromissos.find((item) => item.id === id);
+    if (!atual) return false;
+    if (atual.status === "Concluído") return true;
+
+    const agora = new Date().toISOString();
+
+    const { error } = await supabase
+      .from("agenda_compromissos")
+      .update({
+        status: "Concluído",
+        concluido_em: agora,
+        concluido_por: usuarioNome,
+        atualizado_em: agora,
+      })
+      .eq("id", id);
+
+    if (error) {
+      setMensagem(`Erro ao concluir compromisso: ${error.message}`);
+      return false;
+    }
+
+    setCompromissos((atuais) =>
+      atuais.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              status: "Concluído",
+              concluidoEm: agora,
+              concluidoPor: usuarioNome,
+            }
+          : item,
+      ),
+    );
+
+    setMensagem(
+      atual.tipo === "Visita Técnica"
+        ? "Visita técnica concluída."
+        : "Compromisso concluído.",
+    );
+
+    return true;
   }
 
   async function excluirCompromisso(id: string): Promise<boolean> {
@@ -1533,17 +1733,17 @@ export default function AgendaModule({
       )}
 
       <div className="mt-7 flex flex-col gap-5 lg:flex-row lg:items-start">
-        <aside className="lg:sticky lg:top-4 lg:w-44 lg:shrink-0 xl:w-48">
-          <div className="rounded-2xl border border-zinc-800 bg-black p-2">
-            <p className="px-3 py-2 text-xs font-black uppercase text-zinc-500">
+        <aside className="lg:sticky lg:top-4 lg:w-48 lg:shrink-0 xl:w-52">
+          <div className="rounded-2xl border border-zinc-800 bg-black p-3">
+            <p className="px-2 py-2 text-xs font-black uppercase text-zinc-500">
               Menu da agenda
             </p>
 
-            <nav className="flex flex-col gap-2">
+            <nav className="grid grid-cols-2 gap-2 lg:grid-cols-1">
               <button
                 type="button"
                 onClick={() => setSecaoAtiva("servicos")}
-                className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                className={`flex min-h-[66px] w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
                   secaoAtiva === "servicos"
                     ? "bg-yellow-400 text-black"
                     : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
@@ -1557,22 +1757,54 @@ export default function AgendaModule({
                 <button
                   type="button"
                   onClick={() => setSecaoAtiva("agendar")}
-                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                  className={`flex min-h-[66px] w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
                     secaoAtiva === "agendar"
                       ? "bg-yellow-400 text-black"
                       : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
                   }`}
                 >
                   <span className="text-lg">➕</span>
-                  <span>Novo agendamento</span>
+                  <span>Novo serviço</span>
                 </button>
               )}
 
               {ehAdministrador && (
                 <button
                   type="button"
-                  onClick={() => setSecaoAtiva("compromisso")}
-                  className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                  onClick={() => {
+                    setCompromissoTipo("Visita Técnica");
+                    setCompromissoClienteId("");
+                    setModoClienteVisita("cadastrado");
+                    setVisitaNovoNome("");
+                    setVisitaNovoTelefone("");
+                    setVisitaNovaCidade("");
+                    setVisitaNovoEndereco("");
+                    setVisitaNovoTipoServico("");
+                    setCompromissoTitulo("");
+                    setCompromissoLocal("");
+                    setCompromissoDescricao("");
+                    setSecaoAtiva("visita");
+                  }}
+                  className={`flex min-h-[66px] w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
+                    secaoAtiva === "visita"
+                      ? "bg-yellow-400 text-black"
+                      : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
+                  }`}
+                >
+                  <span className="text-lg">📍</span>
+                  <span>Visita técnica</span>
+                </button>
+              )}
+
+              {ehAdministrador && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompromissoTipo("Reunião");
+                    setCompromissoClienteId("");
+                    setSecaoAtiva("compromisso");
+                  }}
+                  className={`flex min-h-[66px] w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-black uppercase transition ${
                     secaoAtiva === "compromisso"
                       ? "bg-yellow-400 text-black"
                       : "border border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-yellow-400/50 hover:text-yellow-400"
@@ -1583,6 +1815,30 @@ export default function AgendaModule({
                 </button>
               )}
             </nav>
+
+            <div className="mt-3 border-t border-zinc-800 pt-3">
+              <p className="px-2 pb-2 text-[11px] font-black uppercase text-zinc-500">
+                Disponibilidade
+              </p>
+
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => abrirDisponibilidade("semana")}
+                  className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-3 text-left text-xs font-black uppercase leading-tight text-emerald-300 transition hover:border-emerald-400"
+                >
+                  📊 Como está minha semana?
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => abrirDisponibilidade("mes")}
+                  className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-3 text-left text-xs font-black uppercase leading-tight text-emerald-300 transition hover:border-emerald-400"
+                >
+                  📅 Como está meu mês?
+                </button>
+              </div>
+            </div>
           </div>
         </aside>
 
@@ -1755,28 +2011,172 @@ export default function AgendaModule({
 </form>
           )}
 
+          {secaoAtiva === "visita" && ehAdministrador && (
+            <form
+              onSubmit={(evento) => {
+                setCompromissoTipo("Visita Técnica");
+                void agendarCompromisso(evento);
+              }}
+              className="mt-7 rounded-3xl border border-yellow-400/30 bg-black p-5"
+            >
+              <h3 className="text-xl font-black uppercase text-yellow-400">Visita técnica</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Para orçamento ou vistoria no cliente, sem checklist de Ordem de Serviço.
+              </p>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
+                <div className="xl:col-span-12">
+                  <div className="grid grid-cols-2 gap-2 rounded-xl border border-zinc-800 bg-zinc-950 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setModoClienteVisita("cadastrado")}
+                      className={`rounded-lg px-3 py-3 text-sm font-black uppercase ${
+                        modoClienteVisita === "cadastrado"
+                          ? "bg-yellow-400 text-black"
+                          : "text-zinc-400"
+                      }`}
+                    >
+                      Cliente cadastrado
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModoClienteVisita("novo");
+                        setCompromissoClienteId("");
+                        setCompromissoTitulo("");
+                        setCompromissoLocal("");
+                      }}
+                      className={`rounded-lg px-3 py-3 text-sm font-black uppercase ${
+                        modoClienteVisita === "novo"
+                          ? "bg-yellow-400 text-black"
+                          : "text-zinc-400"
+                      }`}
+                    >
+                      + Cliente novo
+                    </button>
+                  </div>
+                </div>
+
+                {modoClienteVisita === "cadastrado" ? (
+                  <div className="xl:col-span-5">
+                    <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">Cliente</label>
+                    <select
+                      value={compromissoClienteId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setCompromissoClienteId(id);
+                        const cliente = clientes.find((item) => item.id === id);
+                        if (cliente) {
+                          setCompromissoTitulo(`Visita técnica — ${cliente.nome}`);
+                          setCompromissoLocal([cliente.endereco, cliente.cidade].filter(Boolean).join(", "));
+                        }
+                      }}
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white"
+                    >
+                      <option value="">Selecione um cliente</option>
+                      {clientes.map((cliente) => (
+                        <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div className="xl:col-span-4">
+                      <Campo label="Nome do cliente" valor={visitaNovoNome} onChange={setVisitaNovoNome} />
+                    </div>
+                    <div className="xl:col-span-4">
+                      <Campo label="Telefone / WhatsApp" valor={visitaNovoTelefone} onChange={setVisitaNovoTelefone} />
+                    </div>
+                    <div className="xl:col-span-4">
+                      <Campo label="Tipo de serviço / interesse" valor={visitaNovoTipoServico} placeholder="Ex.: Câmeras, Solar, Elétrica..." onChange={setVisitaNovoTipoServico} />
+                    </div>
+                    <div className="xl:col-span-4">
+                      <Campo label="Cidade" valor={visitaNovaCidade} onChange={setVisitaNovaCidade} />
+                    </div>
+                    <div className="xl:col-span-8">
+                      <Campo label="Endereço" valor={visitaNovoEndereco} onChange={setVisitaNovoEndereco} />
+                    </div>
+                  </>
+                )}
+
+                <div className="xl:col-span-4">
+                  <Campo label="Data" tipo="date" valor={compromissoData} onChange={setCompromissoData} />
+                </div>
+                <div className="xl:col-span-4">
+                  <Campo label="Horário inicial" tipo="time" valor={compromissoHorario} onChange={setCompromissoHorario} />
+                </div>
+                <div className="xl:col-span-4">
+                  <Campo label="Horário final" tipo="time" valor={compromissoHorarioFim} onChange={setCompromissoHorarioFim} />
+                </div>
+
+                <div className="xl:col-span-4">
+                  <Campo label="Responsável" valor={compromissoResponsavel} onChange={setCompromissoResponsavel} />
+                </div>
+                <div className="xl:col-span-8">
+                  <Campo label="Local" valor={compromissoLocal} placeholder="Preenchido pelo cliente" onChange={setCompromissoLocal} />
+                </div>
+                <div className="xl:col-span-12">
+                  <Campo
+                    label="Descrição"
+                    valor={compromissoDescricao}
+                    placeholder="Ex.: orçamento de cerca elétrica / vistoria do local"
+                    onChange={setCompromissoDescricao}
+                  />
+                </div>
+              </div>
+
+              <button type="submit" className="mt-5 rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black">
+                Agendar visita técnica
+              </button>
+            </form>
+          )}
+
           {secaoAtiva === "compromisso" && ehAdministrador && (
             <form onSubmit={agendarCompromisso} className="mt-7 rounded-3xl border border-yellow-400/30 bg-black p-5">
-              <h3 className="text-xl font-black uppercase text-yellow-400">Novo compromisso</h3>
-              <p className="mt-2 text-sm text-zinc-400">Reunião, compromisso pessoal ou outro bloqueio de agenda.</p>
+              <h3 className="text-xl font-black uppercase text-yellow-400">Novo compromisso / visita</h3>
+              <p className="mt-2 text-sm text-zinc-400">Use Visita Técnica para orçamento ou vistoria sem abrir checklist de Ordem de Serviço.</p>
+
               <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-                <div className="xl:col-span-2"><label className="mb-2 block text-xs font-bold uppercase text-zinc-400">Tipo</label><select value={compromissoTipo} onChange={(e) => setCompromissoTipo(e.target.value as CompromissoAgenda["tipo"])} className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white"><option>Reunião</option><option>Compromisso pessoal</option><option>Outro</option></select></div>
-                <div className="xl:col-span-3"><Campo label="Título" valor={compromissoTitulo} placeholder="Ex.: Reunião com fornecedor" onChange={setCompromissoTitulo} /></div>
-                <div className="xl:col-span-3"><Campo label="Data" tipo="date" valor={compromissoData} onChange={setCompromissoData} /></div>
-                <div className="xl:col-span-2"><Campo label="Horário inicial" tipo="time" valor={compromissoHorario} onChange={setCompromissoHorario} /></div>
-                <div className="xl:col-span-2"><Campo label="Horário final" tipo="time" valor={compromissoHorarioFim} onChange={setCompromissoHorarioFim} /></div>
+                <div className="xl:col-span-3">
+                  <label className="mb-2 block text-xs font-bold uppercase text-zinc-400">Tipo</label>
+                  <select
+                    value={compromissoTipo}
+                    onChange={(e) => {
+                      const novoTipo = e.target.value as CompromissoAgenda["tipo"];
+                      setCompromissoTipo(novoTipo);
+                      if (novoTipo !== "Visita Técnica") setCompromissoClienteId("");
+                    }}
+                    className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white"
+                  >
+                    <option>Reunião</option>
+                    <option>Compromisso pessoal</option>
+                    <option>Outro</option>
+                  </select>
+                </div>
+
+                <div className="xl:col-span-5">
+                  <Campo label="Título" valor={compromissoTitulo} placeholder="Ex.: Reunião com fornecedor" onChange={setCompromissoTitulo} />
+                </div>
+
+                <div className="xl:col-span-4"><Campo label="Data" tipo="date" valor={compromissoData} onChange={setCompromissoData} /></div>
+                <div className="xl:col-span-3"><Campo label="Horário inicial" tipo="time" valor={compromissoHorario} onChange={setCompromissoHorario} /></div>
+                <div className="xl:col-span-3"><Campo label="Horário final" tipo="time" valor={compromissoHorarioFim} onChange={setCompromissoHorarioFim} /></div>
                 <div className="xl:col-span-3"><Campo label="Responsável" valor={compromissoResponsavel} onChange={setCompromissoResponsavel} /></div>
                 <div className="xl:col-span-3"><Campo label="Local" valor={compromissoLocal} placeholder="Opcional" onChange={setCompromissoLocal} /></div>
-                <div className="xl:col-span-6"><Campo label="Descrição" valor={compromissoDescricao} placeholder="Opcional" onChange={setCompromissoDescricao} /></div>
+                <div className="xl:col-span-12"><Campo label="Descrição" valor={compromissoDescricao} placeholder="Opcional" onChange={setCompromissoDescricao} /></div>
               </div>
-              <button type="submit" className="mt-5 rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black">Salvar compromisso</button>
+
+              <button type="submit" className="mt-5 rounded-xl bg-yellow-400 px-6 py-3 font-black uppercase text-black">
+                Salvar compromisso
+              </button>
             </form>
           )}
 
           {secaoAtiva === "servicos" && (
             <div className="space-y-4">
               <div className="rounded-2xl border border-zinc-800 bg-black p-3">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="grid gap-3 lg:grid-cols-[auto_minmax(180px,1fr)_auto] lg:items-center">
                   <div className="flex flex-wrap items-center gap-2">
                     <BotaoVisualizacao
                       ativo={visualizacao === "semana"}
@@ -1798,7 +2198,7 @@ export default function AgendaModule({
                     </BotaoVisualizacao>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="min-w-0">
                     <select
                       value={filtroAgenda}
                       onChange={(evento) =>
@@ -1808,39 +2208,25 @@ export default function AgendaModule({
                             | "servicos"
                             | "treinamentos"
                             | "reunioes"
+                            | "visitas"
                             | "pessoal"
                             | "outros",
                         )
                       }
-                      className="rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                      className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-3 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
                       title="Filtrar eventos da Agenda"
                     >
                       <option value="todos">Todos os eventos</option>
                       <option value="servicos">Serviços</option>
                       <option value="treinamentos">Treinamentos</option>
                       <option value="reunioes">Reuniões</option>
+                      <option value="visitas">Visitas técnicas</option>
                       <option value="pessoal">Compromissos pessoais</option>
                       <option value="outros">Outros</option>
                     </select>
-
-                    <button
-                      type="button"
-                      onClick={() => abrirDisponibilidade("semana")}
-                      className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm font-black uppercase text-emerald-300 transition hover:border-emerald-400"
-                    >
-                      Como está minha semana?
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => abrirDisponibilidade("mes")}
-                      className="rounded-xl border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-sm font-black uppercase text-emerald-300 transition hover:border-emerald-400"
-                    >
-                      Como está meu mês?
-                    </button>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="grid grid-cols-[44px_auto_44px] items-center gap-2">
                     <button
                       type="button"
                       onClick={() => navegarAgenda(-1)}
@@ -1865,7 +2251,7 @@ export default function AgendaModule({
                       →
                     </button>
 
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2 text-sm font-black uppercase text-zinc-300">
+                    <div className="col-span-3 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-center text-sm font-black uppercase text-zinc-300">
                       {visualizacao === "mes"
                         ? tituloMes(dataReferencia)
                         : tituloSemana(inicioSemana)}
@@ -1874,9 +2260,12 @@ export default function AgendaModule({
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <div className="grid grid-cols-2 gap-2 text-xs font-bold sm:grid-cols-3 lg:grid-cols-6">
                 <span className="rounded-full border border-yellow-400/40 bg-yellow-400/10 px-3 py-1 text-yellow-300">
                   Serviço
+                </span>
+                <span className="rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-1 text-amber-200">
+                  Visita técnica
                 </span>
                 <span className="rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-blue-300">
                   Treinamento
@@ -2091,7 +2480,7 @@ export default function AgendaModule({
                 </div>
               ) : visualizacao === "semana" ? (
                 <div className="w-full overflow-x-auto rounded-2xl border border-zinc-800 bg-black">
-                  <div className="grid min-w-[1120px] grid-cols-7">
+                  <div className="grid min-w-[840px] grid-cols-7 lg:min-w-0">
                     {diasSemana.map((dia) => {
                       const servicosDia = servicosExibidos.filter(
                         (servico) => servico.data === dia,
@@ -2118,7 +2507,7 @@ export default function AgendaModule({
                       return (
                         <div
                           key={dia}
-                          className="min-w-[160px] border-r border-zinc-800 p-2 last:border-r-0 lg:min-h-[420px]"
+                          className="min-w-0 border-r border-zinc-800 p-1.5 last:border-r-0 lg:min-h-[420px]"
                         >
                           <div
                             className={`mb-2 rounded-lg px-1 py-2 text-center sm:px-2 ${
@@ -2170,7 +2559,7 @@ export default function AgendaModule({
                 </div>
               ) : (
                 <div className="w-full overflow-x-auto rounded-2xl border border-zinc-800 bg-black">
-                  <div className="grid min-w-[980px] grid-cols-7 border-b border-zinc-800 bg-zinc-950">
+                  <div className="grid min-w-[840px] grid-cols-7 border-b border-zinc-800 bg-zinc-950 lg:min-w-0">
                     {["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"].map(
                       (dia) => (
                         <div
@@ -2292,7 +2681,7 @@ export default function AgendaModule({
       )}
 
       {compromissoSelecionado && (
-        <ModalCompromissoAgenda compromisso={compromissoSelecionado} ehAdministrador={ehAdministrador} onSave={salvarCompromisso} onDelete={excluirCompromisso} onClose={() => setCompromissoSelecionadoId(null)} />
+        <ModalCompromissoAgenda compromisso={compromissoSelecionado} ehAdministrador={ehAdministrador} onSave={salvarCompromisso} onConcluir={concluirCompromisso} onDelete={excluirCompromisso} onClose={() => setCompromissoSelecionadoId(null)} />
       )}
     </section>
   );
@@ -2302,12 +2691,35 @@ export default function AgendaModule({
 type ConflitoAgenda = { tipo: string; titulo: string; horario: string; horarioFim?: string; responsavel?: string };
 
 type CompromissoAgenda = {
-  id: string; tipo: "Reunião" | "Compromisso pessoal" | "Outro"; titulo: string;
-  data: string; horario: string; horarioFim: string; responsavel: string;
-  local: string; descricao: string; criadoPor?: string;
+  id: string;
+  tipo: "Visita Técnica" | "Reunião" | "Compromisso pessoal" | "Outro";
+  titulo: string;
+  data: string;
+  horario: string;
+  horarioFim: string;
+  responsavel: string;
+  local: string;
+  descricao: string;
+  status: "Agendado" | "Concluído";
+  clienteId?: string;
+  clienteNome?: string;
+  clienteTelefone?: string;
+  endereco?: string;
+  cidade?: string;
+  concluidoEm?: string;
+  concluidoPor?: string;
+  criadoPor?: string;
 };
 
 function estiloCompromisso(tipo: CompromissoAgenda["tipo"]) {
+  if (tipo === "Visita Técnica") {
+    return {
+      card: "border-yellow-400/40 bg-yellow-400/10 hover:border-yellow-300",
+      evento: "border-yellow-400/40 bg-yellow-400/10 hover:border-yellow-300",
+      badge: "bg-yellow-400/20 text-yellow-300",
+      texto: "text-yellow-300",
+    };
+  }
   if (tipo === "Reunião") {
     return {
       card: "border-violet-500/30 bg-violet-500/10 hover:border-violet-400",
@@ -2335,7 +2747,7 @@ function estiloCompromisso(tipo: CompromissoAgenda["tipo"]) {
 function CardCompromissoAgenda({ compromisso, onClick }: { compromisso: CompromissoAgenda; onClick: () => void }) {
   const estilo = estiloCompromisso(compromisso.tipo);
   return <button type="button" onClick={onClick} className={`w-full rounded-2xl border p-4 text-left transition ${estilo.card}`}>
-    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${estilo.badge}`}>{compromisso.tipo}</span><span className={`text-sm font-black ${estilo.texto}`}>{compromisso.data.split("-").reverse().join("/")} • {normalizarHorario(compromisso.horario)} às {normalizarHorario(compromisso.horarioFim)}</span></div>
+    <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${estilo.badge}`}>{compromisso.tipo}</span><span className={`text-sm font-black ${estilo.texto}`}>{compromisso.data.split("-").reverse().join("/")} • {normalizarHorario(compromisso.horario)} às {normalizarHorario(compromisso.horarioFim)}</span><span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase ${compromisso.status === "Concluído" ? "bg-emerald-500/15 text-emerald-300" : "bg-zinc-800 text-zinc-300"}`}>{compromisso.status}</span></div>
     <h4 className="mt-2 font-black uppercase text-white">{compromisso.titulo}</h4>{compromisso.responsavel && <p className="mt-1 text-sm text-zinc-400">Responsável: {compromisso.responsavel}</p>}{compromisso.local && <p className="mt-1 text-sm text-zinc-500">Local: {compromisso.local}</p>}
   </button>;
 }
@@ -2350,23 +2762,174 @@ function EventoCompromisso({ compromisso, compacto = false, onClick }: { comprom
   </button>;
 }
 
-function ModalCompromissoAgenda({ compromisso, ehAdministrador, onSave, onDelete, onClose }: { compromisso: CompromissoAgenda; ehAdministrador: boolean; onSave: (c: CompromissoAgenda) => Promise<boolean>; onDelete: (id: string) => Promise<boolean>; onClose: () => void }) {
+function ModalCompromissoAgenda({
+  compromisso,
+  ehAdministrador,
+  onSave,
+  onConcluir,
+  onDelete,
+  onClose,
+}: {
+  compromisso: CompromissoAgenda;
+  ehAdministrador: boolean;
+  onSave: (c: CompromissoAgenda) => Promise<boolean>;
+  onConcluir: (id: string) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
+  onClose: () => void;
+}) {
   const [rascunho, setRascunho] = useState<CompromissoAgenda>({ ...compromisso });
   const [mensagemLocal, setMensagemLocal] = useState("");
-  return <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4"><div className="w-full max-w-3xl rounded-3xl border border-violet-500/40 bg-zinc-950 p-5 shadow-2xl">
-    <div className="flex items-start justify-between gap-4"><div><span className="rounded-full bg-violet-500/15 px-3 py-1 text-xs font-black uppercase text-violet-300">{rascunho.tipo}</span><h3 className="mt-3 text-2xl font-black uppercase text-white">{rascunho.titulo}</h3></div><button type="button" onClick={onClose} className="rounded-xl border border-zinc-700 px-3 py-2 text-sm font-black text-zinc-300">Fechar</button></div>
-    {mensagemLocal && <div className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">{mensagemLocal}</div>}
-    <div className="mt-5 grid gap-4 sm:grid-cols-2">
-      <div><label className="mb-2 block text-xs font-black uppercase text-zinc-500">Tipo</label><select disabled={!ehAdministrador} value={rascunho.tipo} onChange={(e)=>setRascunho({...rascunho,tipo:e.target.value as CompromissoAgenda["tipo"]})} className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white"><option>Reunião</option><option>Compromisso pessoal</option><option>Outro</option></select></div>
-      <EditCampo label="Título" value={rascunho.titulo} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,titulo:v})}/>
-      <EditCampo label="Data" type="date" value={rascunho.data} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,data:v})}/>
-      <div className="grid grid-cols-2 gap-3"><EditCampo label="Início" type="time" value={normalizarHorario(rascunho.horario)} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,horario:v})}/><EditCampo label="Fim" type="time" value={normalizarHorario(rascunho.horarioFim)} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,horarioFim:v})}/></div>
-      <EditCampo label="Responsável" value={rascunho.responsavel} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,responsavel:v})}/>
-      <EditCampo label="Local" value={rascunho.local} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,local:v})}/>
-      <div className="sm:col-span-2"><EditCampo label="Descrição" value={rascunho.descricao} disabled={!ehAdministrador} onChange={(v)=>setRascunho({...rascunho,descricao:v})}/></div>
+
+  const concluido = rascunho.status === "Concluído";
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-4">
+      <div className="w-full max-w-3xl rounded-3xl border border-yellow-400/40 bg-zinc-950 p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-wrap gap-2">
+              <span className="rounded-full bg-yellow-400/15 px-3 py-1 text-xs font-black uppercase text-yellow-300">
+                {rascunho.tipo}
+              </span>
+              <span className={`rounded-full px-3 py-1 text-xs font-black uppercase ${
+                concluido
+                  ? "bg-emerald-500/15 text-emerald-300"
+                  : "bg-zinc-800 text-zinc-300"
+              }`}>
+                {rascunho.status}
+              </span>
+            </div>
+            <h3 className="mt-3 text-2xl font-black uppercase text-white">{rascunho.titulo}</h3>
+            {rascunho.clienteNome && (
+              <p className="mt-1 text-sm font-bold text-zinc-400">
+                Cliente: {rascunho.clienteNome}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-zinc-700 px-3 py-2 text-sm font-black text-zinc-300"
+          >
+            Fechar
+          </button>
+        </div>
+
+        {mensagemLocal && (
+          <div className="mt-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 font-bold text-yellow-300">
+            {mensagemLocal}
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-xs font-black uppercase text-zinc-500">Tipo</label>
+            <select
+              disabled={!ehAdministrador || concluido}
+              value={rascunho.tipo}
+              onChange={(e) =>
+                setRascunho({
+                  ...rascunho,
+                  tipo: e.target.value as CompromissoAgenda["tipo"],
+                })
+              }
+              className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white disabled:opacity-60"
+            >
+              <option>Visita Técnica</option>
+              <option>Reunião</option>
+              <option>Compromisso pessoal</option>
+              <option>Outro</option>
+            </select>
+          </div>
+
+          <EditCampo label="Título" value={rascunho.titulo} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,titulo:v})}/>
+          <EditCampo label="Data" type="date" value={rascunho.data} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,data:v})}/>
+
+          <div className="grid grid-cols-2 gap-3">
+            <EditCampo label="Início" type="time" value={normalizarHorario(rascunho.horario)} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,horario:v})}/>
+            <EditCampo label="Fim" type="time" value={normalizarHorario(rascunho.horarioFim)} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,horarioFim:v})}/>
+          </div>
+
+          <EditCampo label="Responsável" value={rascunho.responsavel} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,responsavel:v})}/>
+          <EditCampo label="Local" value={rascunho.local} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,local:v})}/>
+
+          <div className="sm:col-span-2">
+            <EditCampo label="Descrição" value={rascunho.descricao} disabled={!ehAdministrador || concluido} onChange={(v)=>setRascunho({...rascunho,descricao:v})}/>
+          </div>
+
+          {rascunho.tipo === "Visita Técnica" && rascunho.endereco && (
+            <div className="sm:col-span-2 rounded-xl border border-zinc-800 bg-black p-4">
+              <p className="text-xs font-black uppercase text-zinc-500">Endereço da visita</p>
+              <p className="mt-1 font-bold text-zinc-200">
+                {[rascunho.endereco, rascunho.cidade].filter(Boolean).join(", ")}
+              </p>
+            </div>
+          )}
+
+          {concluido && rascunho.concluidoEm && (
+            <div className="sm:col-span-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+              <p className="font-black uppercase text-emerald-300">Concluído</p>
+              <p className="mt-1 text-sm text-zinc-300">
+                {new Date(rascunho.concluidoEm).toLocaleString("pt-BR")}
+                {rascunho.concluidoPor ? ` · ${rascunho.concluidoPor}` : ""}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {ehAdministrador && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            {!concluido && (
+              <>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const ok = await onSave(rascunho);
+                    if (ok) {
+                      setMensagemLocal("Alterações salvas.");
+                      onClose();
+                    }
+                  }}
+                  className="rounded-xl border border-yellow-400 px-5 py-3 font-black uppercase text-yellow-300"
+                >
+                  Salvar / Reagendar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!window.confirm(
+                      rascunho.tipo === "Visita Técnica"
+                        ? "Marcar esta visita técnica como concluída?"
+                        : "Marcar este compromisso como concluído?"
+                    )) return;
+
+                    const ok = await onConcluir(rascunho.id);
+                    if (ok) onClose();
+                  }}
+                  className="rounded-xl bg-emerald-600 px-5 py-3 font-black uppercase text-white"
+                >
+                  ✓ Concluir
+                </button>
+              </>
+            )}
+
+            <button
+              type="button"
+              onClick={async () => {
+                const ok = await onDelete(rascunho.id);
+                if (ok) onClose();
+              }}
+              className="rounded-xl border border-red-500/60 px-5 py-3 font-black uppercase text-red-400"
+            >
+              Excluir
+            </button>
+          </div>
+        )}
+      </div>
     </div>
-    {ehAdministrador && <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end"><button type="button" onClick={async()=>{const ok=await onSave(rascunho); if(ok){setMensagemLocal("Alterações salvas."); onClose();}}} className="rounded-xl bg-yellow-400 px-5 py-3 font-black uppercase text-black">Salvar / Reagendar</button><button type="button" onClick={async()=>{const ok=await onDelete(rascunho.id); if(ok) onClose();}} className="rounded-xl border border-red-500/60 px-5 py-3 font-black uppercase text-red-400">Excluir compromisso</button></div>}
-  </div></div>;
+  );
 }
 
 function EditCampo({ label, value, onChange, type="text", disabled=false }: { label:string; value:string; onChange:(v:string)=>void; type?:string; disabled?:boolean }) { return <div><label className="mb-2 block text-xs font-black uppercase text-zinc-500">{label}</label><input type={type} value={value} disabled={disabled} onChange={(e)=>onChange(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-black px-4 py-3 text-white disabled:opacity-70"/></div>; }
@@ -2580,7 +3143,7 @@ function EventoAgenda({
       className="min-w-0 w-full overflow-hidden rounded-md border border-yellow-400/30 bg-yellow-400/10 p-1 text-left transition hover:border-yellow-400 sm:rounded-lg sm:p-1.5 md:p-2"
       title={`${normalizarHorario(servico.horario)}${servico.horarioFim ? ` às ${normalizarHorario(servico.horarioFim)}` : ""} • ${servico.clienteNome} • ${servico.tipoServico}`}
     >
-      <p className="whitespace-nowrap text-[10px] font-black text-yellow-400 sm:text-xs">
+      <p className="truncate text-[9px] font-black leading-tight text-yellow-400 sm:text-[10px] xl:text-xs">
         {normalizarHorario(servico.horario) || "--:--"}
         {servico.horarioFim ? ` às ${normalizarHorario(servico.horarioFim)}` : ""}
       </p>
