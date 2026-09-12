@@ -1,18 +1,27 @@
-"use client";
-
 import { useState } from "react";
 import { Servico } from "./types";
 
 type CardServicoProps = {
   servico: Servico;
+
+  // Props usadas pela versão atual da Agenda
+  usuarioNome?: string;
   ehAdministrador: boolean;
-  aoAbrir: (servico: Servico) => void;
-  aoExcluir: (servicoId: string) => void;
-  aoAlterarStatus: (
+  podeVerContatoCliente?: boolean;
+  aoFechar?: () => void;
+  aoSalvar?: (atualizado: Servico) => Promise<string | boolean> | string | boolean;
+
+  // Ações
+  aoCancelar?: (servicoId: string) => Promise<boolean> | boolean | void;
+  aoExcluir: (servicoId: string) => Promise<void> | void;
+  aoAbrirMaps: (endereco: string, cidade?: string) => void;
+
+  // Compatibilidade com versões anteriores do Card
+  aoAbrir?: (servico: Servico) => void;
+  aoAlterarStatus?: (
     servicoId: string,
     novoStatus: Servico["status"],
-  ) => void;
-  aoAbrirMaps: (endereco: string, cidade: string) => void;
+  ) => Promise<void> | void;
 };
 
 function formatarData(data: string) {
@@ -24,10 +33,13 @@ function formatarData(data: string) {
 export default function CardServico({
   servico,
   ehAdministrador,
-  aoAbrir,
+  aoFechar,
+  aoSalvar,
+  aoCancelar,
   aoExcluir,
-  aoAlterarStatus,
   aoAbrirMaps,
+  aoAbrir,
+  aoAlterarStatus,
 }: CardServicoProps) {
   const [expandido, setExpandido] = useState(false);
 
@@ -38,6 +50,30 @@ export default function CardServico({
   const faixaHorario = servico.horarioFim
     ? `${servico.horario} às ${servico.horarioFim}`
     : servico.horario;
+
+  async function abrirServico() {
+    if (aoAbrir) {
+      aoAbrir(servico);
+      return;
+    }
+
+    // Se a Agenda atual trabalha com modal/controlador externo,
+    // mantém compatibilidade sem forçar comportamento inexistente.
+    if (aoFechar) {
+      // Não fechamos nada aqui; a prop fica apenas aceita pelo componente.
+    }
+  }
+
+  async function alterarStatus(novoStatus: Servico["status"]) {
+    if (aoAlterarStatus) {
+      await aoAlterarStatus(servico.id, novoStatus);
+      return;
+    }
+
+    if (aoSalvar) {
+      await aoSalvar({ ...servico, status: novoStatus });
+    }
+  }
 
   return (
     <article className="rounded-2xl border border-zinc-800 bg-black transition hover:border-zinc-700">
@@ -122,16 +158,18 @@ export default function CardServico({
           )}
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <button
-              type="button"
-              onClick={(evento) => {
-                evento.stopPropagation();
-                aoAbrir(servico);
-              }}
-              className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
-            >
-              Abrir serviço
-            </button>
+            {(aoAbrir || aoFechar) && (
+              <button
+                type="button"
+                onClick={(evento) => {
+                  evento.stopPropagation();
+                  void abrirServico();
+                }}
+                className="rounded-xl border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+              >
+                Abrir serviço
+              </button>
+            )}
 
             <button
               type="button"
@@ -149,17 +187,31 @@ export default function CardServico({
                 value={servico.status}
                 onClick={(evento) => evento.stopPropagation()}
                 onChange={(evento) =>
-                  aoAlterarStatus(
-                    servico.id,
+                  void alterarStatus(
                     evento.target.value as Servico["status"],
                   )
                 }
                 className="rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-2 text-sm font-bold text-white"
               >
                 <option>Agendado</option>
+                <option>Confirmado</option>
                 <option>Em execução</option>
                 <option>Concluído</option>
+                <option>Cancelado</option>
               </select>
+            )}
+
+            {ehAdministrador && aoCancelar && (
+              <button
+                type="button"
+                onClick={(evento) => {
+                  evento.stopPropagation();
+                  void aoCancelar(servico.id);
+                }}
+                className="rounded-xl border border-orange-500/70 px-4 py-2 text-sm font-black uppercase text-orange-300"
+              >
+                Cancelar / desmarcar
+              </button>
             )}
 
             {ehAdministrador && (
@@ -167,11 +219,11 @@ export default function CardServico({
                 type="button"
                 onClick={(evento) => {
                   evento.stopPropagation();
-                  aoExcluir(servico.id);
+                  void aoExcluir(servico.id);
                 }}
                 className="rounded-xl border border-red-500/60 px-4 py-2 text-sm font-black uppercase text-red-400"
               >
-                Excluir
+                Excluir definitivamente
               </button>
             )}
           </div>

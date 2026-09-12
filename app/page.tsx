@@ -20,6 +20,7 @@ import EstoqueModule from "@/modules/estoque/EstoqueModule";
 import FormularioAutomacao from "@/components/FormularioAutomacao";
 import OrcamentosRapidosModule from "@/modules/orcamentos-rapidos/OrcamentosRapidosModule";
 import ConfigEmpresaModule from "@/modules/configuracoes/ConfigEmpresaModule";
+import PrecificacaoModule from "@/modules/precificacao/PrecificacaoModule";
 
 import ContratosModule from "@/modules/contratos/ContratosModule";
 import EngenhariaModule from "@/modules/engenharia/EngenhariaModule";
@@ -65,6 +66,7 @@ const PERMISSOES_SISTEMA = [
   { id: "treinamentos", nome: "Treinamentos" },
   { id: "propostas", nome: "Propostas" },
   { id: "orcamento-rapido", nome: "Orçamentos Rápidos" },
+  { id: "precificacao", nome: "Precificação" },
   { id: "historico-propostas", nome: "Histórico de Propostas" },
   { id: "avaliacoes", nome: "Avaliações Google" },
   { id: "recibos", nome: "Recibos" },
@@ -93,6 +95,7 @@ type TelaSistema =
   | "dashboard"
   | "propostas"
   | "orcamento-rapido"
+  | "precificacao"
   | "historico-propostas"
   | "avaliacoes"
   | "energia-solar"
@@ -147,6 +150,7 @@ const ORDEM_MENU_PADRAO: TelaSistema[] = [
   "financeiro",
   "propostas",
   "orcamento-rapido",
+  "precificacao",
   "historico-propostas",
   "avaliacoes",
   "funcionarios",
@@ -197,6 +201,7 @@ export default function Home() {
 
   const [temaSistema, setTemaSistema] = useState<"escuro" | "claro">("escuro");
   const [menuTopoAberto, setMenuTopoAberto] = useState(false);
+  const [, setVersaoCardsDashboard] = useState(0);
 
   useEffect(() => {
     try {
@@ -234,6 +239,7 @@ export default function Home() {
     "clientes",
     "funil",
     "orcamento-rapido",
+    "precificacao",
     "agenda",
     "vistorias",
     "engenharia",
@@ -260,6 +266,7 @@ export default function Home() {
           "clientes",
           "funil",
           "orcamento-rapido",
+          "precificacao",
           "agenda",
           "vistorias",
           "engenharia",
@@ -290,6 +297,7 @@ export default function Home() {
       : [...atuais, tela];
 
     localStorage.setItem(chaveCardsDashboard(), JSON.stringify(novos));
+    setVersaoCardsDashboard((valor) => valor + 1);
     window.dispatchEvent(new CustomEvent("choqueseg-dashboard-modulos-atualizados"));
   }
 
@@ -1183,117 +1191,166 @@ export default function Home() {
           color:#0f172a !important;
         }
       `}</style>
-      <header className="tema-topo sticky top-0 z-50 border-b border-yellow-400/30 bg-black/95 backdrop-blur">
-        <div className="flex items-center justify-between gap-3 px-3 py-2.5 md:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <img
-              src="/imagens/logo/brasao-choqueseg.png"
-              alt="Brasão da CHOQUESEG"
-              className="h-11 w-11 shrink-0 object-contain md:h-12 md:w-12"
-            />
-            <div className="min-w-0">
-              <h1 className="marca-choqueseg truncate font-black uppercase text-yellow-400">
-                CHOQUESEG PRO
-              </h1>
-              <p className="truncate text-xs text-zinc-400">
-                {usuarioLogado.nome}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-1.5">
+      {telaAtual !== "dashboard" ? (
+        <header className="tema-topo sticky top-0 z-50 border-b border-yellow-400/30 bg-black/95 backdrop-blur relative">
+          <div className="flex h-12 items-center justify-between gap-2 px-2 md:px-4">
+            <button
+              type="button"
+              onClick={() => { setTelaAtual("dashboard"); setMenuTopoAberto(false); }}
+              className="rounded-lg border border-yellow-400/50 bg-zinc-950 px-3 py-2 text-xs font-black uppercase text-yellow-400"
+            >
+              ← Tela inicial
+            </button>
             <button
               type="button"
               onClick={() => setMenuTopoAberto((atual) => !atual)}
-              className="rounded-xl border border-yellow-400/50 bg-zinc-950 px-3 py-2 text-sm font-black text-yellow-400"
-              title="Abrir menu"
+              className="rounded-lg border border-yellow-400/50 bg-zinc-950 px-3 py-2 text-sm font-black text-yellow-400"
               aria-expanded={menuTopoAberto}
             >
-              ☰ <span className="hidden sm:inline">Menu</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={alternarTemaSistema}
-              className="manter-amarelo rounded-full border border-yellow-400/60 bg-zinc-950 px-3 py-2 text-base"
-              title={temaSistema === "escuro" ? "Ativar modo claro" : "Ativar modo escuro"}
-            >
-              {temaSistema === "escuro" ? "🌙" : "☀️"}
-            </button>
-
-            <button
-              type="button"
-              onClick={sair}
-              className="rounded-xl border border-red-500/60 px-3 py-2 text-xs font-black uppercase text-red-400 transition hover:bg-red-500 hover:text-white md:px-4"
-            >
-              Sair
+              ☰ Menu
             </button>
           </div>
-        </div>
 
-        {menuTopoAberto && (
-          <div className="tema-topo border-t border-yellow-400/20 bg-black/95 px-3 py-3 backdrop-blur">
-            <div className="grid grid-cols-2 gap-2">
-              {itensMenuDoPerfil(usuarioLogado.perfil, ordemMenu, usuarioLogado.permissoes ?? []).map((item) => (
-                <button
-                  key={`menu-topo-${item.tela}`}
-                  type="button"
-                  onClick={() => navegarPeloTopo(item.tela)}
-                  className={`flex min-w-0 items-center gap-2 rounded-xl border px-3 py-3 text-left text-sm font-bold transition ${
-                    telaAtual === item.tela
-                      ? "border-yellow-400 bg-yellow-400 text-black"
-                      : "border-zinc-800 bg-zinc-950 text-zinc-300"
-                  }`}
-                >
-                  <span className="text-lg">{item.icone}</span>
-                  <span className="min-w-0 truncate">{item.nome}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </header>
-
-      <div className="flex h-[calc(100vh-73px)] overflow-hidden">
-        <aside className="hidden h-full w-64 shrink-0 overflow-y-auto border-r border-zinc-800 bg-black p-4 md:block">
-          <MenuLateral
-            telaAtual={telaAtual}
-            alterarTela={setTelaAtual}
-            perfil={usuarioLogado.perfil}
-            permissoes={usuarioLogado.permissoes ?? []}
-            ordemMenu={ordemMenu}
-            salvarOrdemMenu={salvarOrdemMenu}
-          />
-        </aside>
-
-        <main className="h-full min-w-0 flex-1 overflow-y-auto">
-
-          {telaAtual !== "dashboard" && ehAdministrador && (
-            <div className="tema-topo sticky top-0 z-40 border-b border-yellow-400/20 bg-zinc-950/95 px-3 py-2 backdrop-blur md:px-5">
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setTelaAtual("dashboard")}
-                  className="rounded-xl border border-yellow-400/50 bg-black px-3 py-2 text-xs font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
-                >
-                  ← Voltar para a tela inicial
-                </button>
-
-                {MODULOS_FIXAVEIS.includes(telaAtual) && (
-                  <button
-                    type="button"
-                    onClick={() => alternarModuloNoDashboard(telaAtual)}
-                    className="rounded-xl border border-blue-500/50 bg-black px-3 py-2 text-xs font-black uppercase text-blue-400 transition hover:bg-blue-500 hover:text-white"
-                    title="Adicionar ou remover este módulo da tela inicial"
-                  >
-                    {moduloEstaNoDashboard(telaAtual)
-                      ? "📌 Remover da tela inicial"
-                      : "📌 Adicionar à tela inicial"}
-                  </button>
-                )}
+          {menuTopoAberto && (
+            <div className="tema-topo absolute right-2 top-full z-[80] max-h-[80vh] w-[min(92vw,620px)] overflow-y-auto rounded-b-2xl border border-yellow-400/20 bg-black/98 p-3 shadow-2xl backdrop-blur">
+              <div className="grid grid-cols-2 gap-2">
+                {itensMenuDoPerfil(usuarioLogado.perfil, ordemMenu, usuarioLogado.permissoes ?? []).map((item) => (
+                  <div key={`menu-topo-compacto-${item.tela}`} className="flex min-w-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => navegarPeloTopo(item.tela)}
+                      className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-3 text-left text-sm font-bold ${
+                        telaAtual === item.tela
+                          ? "border-yellow-400 bg-yellow-400 text-black"
+                          : "border-zinc-800 bg-zinc-950 text-zinc-300"
+                      }`}
+                    >
+                      <span className="text-lg">{item.icone}</span>
+                      <span className="min-w-0 truncate">{item.nome}</span>
+                    </button>
+                    {MODULOS_FIXAVEIS.includes(item.tela) && item.tela !== "dashboard" && (
+                      <button
+                        type="button"
+                        onClick={() => alternarModuloNoDashboard(item.tela)}
+                        className={`w-10 shrink-0 rounded-xl border text-base font-black transition ${
+                          moduloEstaNoDashboard(item.tela)
+                            ? "border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white"
+                            : "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400 hover:text-black"
+                        }`}
+                        title={moduloEstaNoDashboard(item.tela) ? "Remover da tela inicial" : "Adicionar à tela inicial"}
+                      >
+                        {moduloEstaNoDashboard(item.tela) ? "−" : "+"}
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
+        </header>
+      ) : (
+        <header className="tema-topo sticky top-0 z-50 border-b border-yellow-400/30 bg-black/95 backdrop-blur relative">
+          <div className="flex h-10 items-center justify-between gap-2 px-2 md:px-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <img
+                src="/imagens/logo/brasao-choqueseg.png"
+                alt="Brasão da CHOQUESEG"
+                className="h-7 w-7 shrink-0 object-contain"
+              />
+              <div className="min-w-0">
+                <h1 className="marca-choqueseg truncate font-black uppercase text-yellow-400">
+                  CHOQUESEG PRO
+                </h1>
+                <p className="truncate text-xs text-zinc-400">
+                  {usuarioLogado.nome}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setMenuTopoAberto((atual) => !atual)}
+                className="rounded-lg border border-yellow-400/50 bg-zinc-950 px-2.5 py-1.5 text-xs font-black text-yellow-400"
+                title="Abrir menu"
+                aria-expanded={menuTopoAberto}
+              >
+                ☰ <span className="hidden sm:inline">Menu</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={alternarTemaSistema}
+                className="manter-amarelo rounded-full border border-yellow-400/60 bg-zinc-950 px-2.5 py-1.5 text-sm"
+                title={temaSistema === "escuro" ? "Ativar modo claro" : "Ativar modo escuro"}
+              >
+                {temaSistema === "escuro" ? "🌙" : "☀️"}
+              </button>
+
+              <button
+                type="button"
+                onClick={sair}
+                className="rounded-lg border border-red-500/60 px-2.5 py-1.5 text-[11px] font-black uppercase text-red-400 transition hover:bg-red-500 hover:text-white"
+              >
+                Sair
+              </button>
+            </div>
+          </div>
+
+          {menuTopoAberto && (
+            <div className="tema-topo absolute right-2 top-full z-[80] max-h-[75vh] w-[min(92vw,620px)] overflow-y-auto rounded-b-2xl border border-yellow-400/20 bg-black/98 px-3 py-3 shadow-2xl backdrop-blur">
+              <div className="grid grid-cols-2 gap-2">
+                {itensMenuDoPerfil(usuarioLogado.perfil, ordemMenu, usuarioLogado.permissoes ?? []).map((item) => (
+                  <div key={`menu-topo-${item.tela}`} className="flex min-w-0 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => navegarPeloTopo(item.tela)}
+                      className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl border px-3 py-3 text-left text-sm font-bold transition ${
+                        telaAtual === item.tela
+                          ? "border-yellow-400 bg-yellow-400 text-black"
+                          : "border-zinc-800 bg-zinc-950 text-zinc-300"
+                      }`}
+                    >
+                      <span className="text-lg">{item.icone}</span>
+                      <span className="min-w-0 truncate">{item.nome}</span>
+                    </button>
+                    {MODULOS_FIXAVEIS.includes(item.tela) && item.tela !== "dashboard" && (
+                      <button
+                        type="button"
+                        onClick={() => alternarModuloNoDashboard(item.tela)}
+                        className={`w-10 shrink-0 rounded-xl border text-base font-black transition ${
+                          moduloEstaNoDashboard(item.tela)
+                            ? "border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500 hover:text-white"
+                            : "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400 hover:text-black"
+                        }`}
+                        title={moduloEstaNoDashboard(item.tela) ? "Remover da tela inicial" : "Adicionar à tela inicial"}
+                      >
+                        {moduloEstaNoDashboard(item.tela) ? "−" : "+"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </header>
+      )}
+
+      <div className={`flex overflow-hidden ${telaAtual !== "dashboard" ? "h-[calc(100vh-48px)]" : "h-[calc(100vh-40px)]"}`}>
+        {telaAtual === "dashboard" && (
+          <aside className="hidden">
+            <MenuLateral
+              telaAtual={telaAtual}
+              alterarTela={setTelaAtual}
+              perfil={usuarioLogado.perfil}
+              permissoes={usuarioLogado.permissoes ?? []}
+              ordemMenu={ordemMenu}
+              salvarOrdemMenu={salvarOrdemMenu}
+            />
+          </aside>
+        )}
+
+        <main className={`h-full min-w-0 flex-1 ${telaAtual !== "dashboard" ? "overflow-y-auto" : "overflow-y-auto"}`}>
 
           {telaAtual === "dashboard" && podeDashboard && (
             <DashboardModule
@@ -1380,6 +1437,12 @@ export default function Home() {
 )}
           {telaAtual === "avaliacoes" && podeAvaliacoes && (
             <AvaliacaoGoogleModule />
+          )}
+
+          {telaAtual === "precificacao" && ehAdministrador && (
+            <div className="h-full min-h-0">
+              <PrecificacaoModule usuarioNome={usuarioLogado.nome} />
+            </div>
           )}
 
           {telaAtual === "orcamento-rapido" && podeOrcamentoRapido && (
@@ -1473,6 +1536,7 @@ const ITENS_ADMINISTRADOR: ItemMenu[] = [
   { tela: "financeiro", nome: "Financeiro", icone: "💰" },
   { tela: "propostas", nome: "Propostas", icone: "📄" },
   { tela: "orcamento-rapido", nome: "Orçamentos Rápidos", icone: "⚡" },
+  { tela: "precificacao", nome: "Precificação", icone: "🧮" },
   { tela: "historico-propostas", nome: "Histórico de Propostas", icone: "📁" },
   { tela: "avaliacoes", nome: "Avaliações Google", icone: "⭐" },
   { tela: "funcionarios", nome: "Funcionários", icone: "👷" },
@@ -2424,5 +2488,4 @@ function ModuloEmConstrucao({
     </section>
   );
 }
-
 

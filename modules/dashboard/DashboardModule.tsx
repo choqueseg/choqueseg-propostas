@@ -1,4 +1,3 @@
-"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
@@ -99,6 +98,7 @@ type TelaSistema =
   | "dashboard"
   | "propostas"
   | "orcamento-rapido"
+  | "precificacao"
   | "energia-solar"
   | "seguranca-eletronica"
   | "eletrica"
@@ -215,6 +215,7 @@ const MODULOS_DASHBOARD: ModuloDashboard[] = [
   { tela: "clientes", titulo: "Clientes", icone: "👥" },
   { tela: "funil", titulo: "Funil", icone: "🔷" },
   { tela: "orcamento-rapido", titulo: "Orçamentos Rápidos", icone: "📄" },
+  { tela: "precificacao", titulo: "Precificação", icone: "🧮" },
   { tela: "agenda", titulo: "Agenda", icone: "🗓️" },
   { tela: "vistorias", titulo: "Vistorias", icone: "🔎" },
   { tela: "engenharia", titulo: "Projetos / Engenharia", icone: "☀️" },
@@ -237,6 +238,7 @@ const MODULOS_DASHBOARD_PADRAO: TelaSistema[] = [
   "clientes",
   "funil",
   "orcamento-rapido",
+  "precificacao",
   "agenda",
   "vistorias",
   "engenharia",
@@ -274,6 +276,7 @@ export default function DashboardModule({
   const [itemSelecionado, setItemSelecionado] = useState<ItemPainel | null>(null);
   const [versaoFinanceiro, setVersaoFinanceiro] = useState(0);
   const [modoOrganizar, setModoOrganizar] = useState(false);
+  const [topoExpandido, setTopoExpandido] = useState(false);
   const [ordemCards, setOrdemCards] = useState<DashboardCardId[]>(ORDEM_PADRAO_CARDS);
   const [cardsOcultos, setCardsOcultos] = useState<DashboardCardId[]>([]);
   const [chaveLayoutUsuario, setChaveLayoutUsuario] = useState<string>("");
@@ -1252,269 +1255,44 @@ export default function DashboardModule({
 
 
   return (
-    <section className={`min-h-screen p-3 md:p-6 ${tema === "claro" ? "bg-white text-zinc-950" : "bg-zinc-950 text-white"}`}>
-      <div className={`sticky top-0 z-40 -mx-3 border-b border-yellow-400/20 px-3 pb-3 pt-1 backdrop-blur md:-mx-6 md:px-6 ${tema === "claro" ? "bg-white/95" : "bg-zinc-950/95"}`}>
-        {indicadores.retorno > 0 && (
-          <button
-            type="button"
-            onClick={() => setCategoriaAberta("retorno")}
-            className="tema-card mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border border-orange-400/60 bg-orange-400/10 p-3 text-left transition hover:border-orange-400"
-          >
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase text-orange-400">
-                🔔 Retornos de orçamento
-              </p>
-              <p className="mt-1 text-sm font-black text-white">
-                {indicadores.retorno} cliente(s) precisam de contato hoje.
-              </p>
-              <p className="mt-1 text-xs text-zinc-400">
-                Toque para ver os clientes e preparar a mensagem de follow-up.
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full bg-orange-400 px-3 py-1.5 text-lg font-black text-black">
-              {indicadores.retorno}
-            </span>
-          </button>
-        )}
-
-        <div className="mb-3 flex items-center justify-between gap-3">
+    <section className={`min-h-screen p-1.5 md:p-2 ${tema === "claro" ? "bg-white text-zinc-950" : "bg-zinc-950 text-white"}`}>
+      <div className={`sticky top-0 z-40 -mx-1.5 border-b border-yellow-400/20 px-1.5 py-1 backdrop-blur md:-mx-2 md:px-2 ${tema === "claro" ? "bg-white/95" : "bg-zinc-950/95"}`}>
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-yellow-400">
-              CHOQUESEG PRO
-            </p>
-            <h2 className="truncate text-xl font-black uppercase md:text-2xl">Dashboard</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-yellow-400 sm:text-[11px]">CHOQUESEG PRO</p>
+            <h2 className="truncate text-base font-black uppercase sm:text-lg">Dashboard</h2>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setModoOrganizar((valor) => !valor)}
-            className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-black uppercase transition ${
-              modoOrganizar
-                ? "border-yellow-400 bg-yellow-400 text-black"
-                : "border-yellow-400/40 bg-black text-yellow-300 hover:border-yellow-400"
-            }`}
-          >
-            {modoOrganizar ? "Concluir" : "Organizar"}
-          </button>
-        </div>
-
-        <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-2">
-          <div className="min-w-0 overflow-hidden rounded-xl border border-yellow-400/30 bg-black/80 [&>div]:!p-2 [&>section]:!p-2 [&_p]:!hidden [&_h1]:!text-sm [&_h2]:!text-sm [&_h3]:!text-sm [&_button]:!min-h-0 [&_button]:!py-2 [&_button]:!px-2 [&_button]:!text-xs">
-            <CentralVozGlobal alterarTela={alterarTela} />
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setCategoriaAberta("hoje")}
-            className="min-w-0 rounded-xl border border-yellow-400/40 bg-yellow-400/10 p-2.5 text-left transition hover:border-yellow-400"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase leading-tight text-yellow-300 sm:text-xs">📅 Compromissos de hoje</p>
-                <p className={`mt-1 line-clamp-2 text-[11px] font-black leading-tight sm:text-sm ${tema === "claro" ? "text-zinc-950" : "text-white"}`}>
-                  {itensHoje.length === 0 ? "Nenhum compromisso para hoje." : resumoHoje}
-                </p>
-                <p className="mt-1 text-[10px] text-zinc-400 sm:text-xs">{formatarData(hoje)}</p>
-              </div>
-              <span className="shrink-0 rounded-full bg-yellow-400 px-2.5 py-1 text-sm font-black text-black sm:text-base">
-                {itensHoje.length}
-              </span>
-            </div>
-
-            {itensHoje.length > 0 && (
-              <div className="mt-1 hidden gap-1 sm:grid sm:grid-cols-2">
-                {itensHoje.slice(0, 2).map((item) => (
-                  <div key={`dashboard-hoje-${item.id}`} className="min-w-0 rounded-lg border border-yellow-400/15 bg-black/30 px-2 py-1.5">
-                    <p className="truncate text-xs font-black text-white">
-                      {item.horario ? `${item.horario} • ` : ""}{item.titulo}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="pt-4">
-        {erro && (
-          <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
-            {erro}
-          </div>
-        )}
-
-        {carregando && (
-          <div className="mb-4 rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm font-bold text-zinc-400">
-            Atualizando informações do Dashboard...
-          </div>
-        )}
-
-        {financeiroProximosVencimentos.quantidade > 0 && (
-          <section className="mb-4 rounded-2xl border border-orange-400/50 bg-orange-400/10 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-xs font-black uppercase text-orange-300">💰 Próximos vencimentos</p>
-                <p className="mt-1 text-sm font-black leading-snug">
-                  {financeiroProximosVencimentos.quantidade} compromisso(s) financeiro(s) exigem atenção.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => alterarTela("financeiro")}
-                className="shrink-0 rounded-lg bg-orange-400 px-3 py-2 text-xs font-black uppercase text-black"
-              >
-                Abrir
-              </button>
-            </div>
-          </section>
-        )}
-
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-black uppercase text-yellow-400">Painel inicial</p>
-            <p className="text-xs text-zinc-500">
-              Seus módulos favoritos — 3 por linha no celular
-            </p>
-          </div>
-
-          {modoOrganizar && (
+          <div className="flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={() => salvarModulosTelaInicial(MODULOS_DASHBOARD_PADRAO)}
-              className="rounded-lg border border-zinc-700 px-3 py-2 text-[11px] font-black uppercase text-zinc-300"
+              onClick={() => setTopoExpandido((valor) => !valor)}
+              className="rounded-lg border border-yellow-400/40 bg-black px-2.5 py-1.5 text-[10px] font-black uppercase text-yellow-300 transition hover:border-yellow-400 sm:text-xs"
             >
-              Restaurar padrão
+              {topoExpandido ? "Recolher" : "Abrir painel"}
             </button>
-          )}
-        </div>
-
-        <div className="grid min-w-0 grid-cols-3 gap-2 md:grid-cols-4 xl:grid-cols-4">
-          {modulosTelaInicial.map((tela) => {
-            const modulo = MODULOS_DASHBOARD.find((item) => item.tela === tela);
-            if (!modulo) return null;
-
-            return (
-              <div
-                key={`modulo-dashboard-${modulo.tela}`}
-                className={`tema-card relative min-w-0 overflow-hidden rounded-xl border bg-black p-2.5 transition md:p-4 ${
-                  modoOrganizar
-                    ? "border-yellow-400/60"
-                    : "border-zinc-800 hover:border-yellow-400/70"
-                }`}
-              >
-                {modoOrganizar && (
-                  <button
-                    type="button"
-                    onClick={() => removerModulo(modulo.tela)}
-                    className="absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-red-500/60 bg-black text-xs font-black text-red-400"
-                    title="Remover somente da tela inicial"
-                  >
-                    ×
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  disabled={modoOrganizar}
-                  onClick={() => alterarTela(modulo.tela)}
-                  className="w-full min-w-0 text-left disabled:cursor-default"
-                >
-                  <span className="text-2xl drop-shadow-sm md:text-3xl">
-                    {modulo.icone}
-                  </span>
-                  <p className="tema-titulo mt-2 min-h-[2.3rem] break-words text-[10px] font-black uppercase leading-tight text-zinc-300 sm:text-[11px] md:text-sm">
-                    {modulo.titulo}
-                  </p>
-
-                  {(() => {
-                    const metrica = metricasModulo(modulo.tela);
-                    return (
-                      <>
-                        {metrica.valor !== null && (
-                          <p className="tema-valor mt-1 text-2xl font-black leading-none text-yellow-400 md:text-3xl">
-                            {metrica.valor}
-                          </p>
-                        )}
-                        {metrica.detalhe && (
-                          <p className="mt-1 line-clamp-2 text-[9px] font-bold leading-tight text-zinc-500 sm:text-[10px]">
-                            {metrica.detalhe}
-                          </p>
-                        )}
-                      </>
-                    );
-                  })()}
-
-                  <p className="mt-2 text-[10px] font-black uppercase text-yellow-400">
-                    Abrir →
-                  </p>
-                </button>
-
-                {modoOrganizar && (
-                  <div className="mt-2 grid grid-cols-4 gap-1">
-                    <button type="button" onClick={() => moverModulo(modulo.tela, -1)} className="rounded-md border border-zinc-700 py-1 text-xs">←</button>
-                    <button type="button" onClick={() => moverModulo(modulo.tela, 1)} className="rounded-md border border-zinc-700 py-1 text-xs">→</button>
-                    <button type="button" onClick={() => moverModulo(modulo.tela, -3)} className="rounded-md border border-zinc-700 py-1 text-xs">↑</button>
-                    <button type="button" onClick={() => moverModulo(modulo.tela, 3)} className="rounded-md border border-zinc-700 py-1 text-xs">↓</button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {modoOrganizar && (
-          <div className="mt-4 rounded-2xl border border-dashed border-yellow-400/40 bg-yellow-400/5 p-3">
-            <p className="text-xs font-black uppercase text-yellow-300">
-              Adicionar à tela inicial
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {MODULOS_DASHBOARD
-                .filter((modulo) => !modulosTelaInicial.includes(modulo.tela))
-                .map((modulo) => (
-                  <button
-                    key={`adicionar-modulo-${modulo.tela}`}
-                    type="button"
-                    onClick={() => adicionarModulo(modulo.tela)}
-                    className="rounded-lg border border-yellow-400/30 bg-black px-3 py-2 text-xs font-black text-yellow-300"
-                  >
-                    + {modulo.icone} {modulo.titulo}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
-
-        <div className="tema-card mt-4 rounded-2xl border border-yellow-400/30 bg-black p-3">
-          <button
-            type="button"
-            onClick={() => alterarTela("funil")}
-            className="flex w-full items-center justify-between gap-3 text-left"
-          >
-            <h3 className="text-base font-black uppercase text-yellow-400 md:text-xl">Resumo do funil</h3>
-            <span className="text-[11px] font-black uppercase text-yellow-300">Abrir funil →</span>
-          </button>
-          <div className="mt-3 grid min-w-0 grid-cols-3 gap-2">
-            <Resumo
-              nome="Novo contato"
-              valor={indicadores.novoContato}
-              onClick={() => alterarTela("funil")}
-            />
-            <Resumo
-              nome="Negociação"
-              valor={indicadores.negociacao}
-              onClick={() => alterarTela("funil")}
-            />
-            <Resumo
-              nome="Pós-venda"
-              valor={indicadores.posVenda}
-              onClick={() => alterarTela("funil")}
-            />
+            <button
+              type="button"
+              onClick={() => {
+                setModoOrganizar((valor) => !valor);
+                setTopoExpandido(true);
+              }}
+              className={`shrink-0 rounded-lg border px-2 py-1.5 text-[10px] font-black uppercase transition sm:px-3 sm:text-xs ${
+                modoOrganizar
+                  ? "border-yellow-400 bg-yellow-400 text-black"
+                  : "border-yellow-400/40 bg-black text-yellow-300 hover:border-yellow-400"
+              }`}
+            >
+              {modoOrganizar ? "Concluir" : "Organizar"}
+            </button>
           </div>
         </div>
 
-        <div className="tema-card mt-4 rounded-2xl border border-yellow-400/30 bg-black p-3">
-          <h3 className="text-base font-black uppercase text-yellow-400 md:text-xl">⚡ Orçamento rápido</h3>
-          <div className="mt-3 grid grid-cols-3 gap-2">
+        {topoExpandido && (
+          <div className="mt-1.5">
+        <div className="tema-card mb-1.5 rounded-lg border border-yellow-400/30 bg-black p-2">
+          <h3 className="text-sm font-black uppercase text-yellow-400 sm:text-base md:text-lg">⚡ Orçamento rápido</h3>
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
             <Atalho
               nome="Segurança"
               icone="📷"
@@ -1545,16 +1323,263 @@ export default function DashboardModule({
           </div>
         </div>
 
-        <div className="tema-card mt-4 rounded-2xl border border-zinc-800 bg-black p-3">
-          <h3 className="text-base font-black uppercase text-yellow-400 md:text-xl">Acessos rápidos</h3>
-          <div className="mt-3 grid min-w-0 grid-cols-3 gap-2 md:grid-cols-5">
-            <Atalho nome="Novo cliente" icone="👤" onClick={() => alterarTela("clientes")} />
-            <Atalho nome="Abrir funil" icone="📊" onClick={() => alterarTela("funil")} />
-            <Atalho nome="Proposta" icone="📄" onClick={() => alterarTela("propostas")} />
-            <Atalho nome="Agenda" icone="📅" onClick={() => alterarTela("agenda")} />
-            <Atalho nome="Recibo" icone="🧾" onClick={() => alterarTela("recibos")} />
+        {modoOrganizar && (
+          <div className="mb-1.5 rounded-lg border border-yellow-400/40 bg-black p-2">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <p className="text-xs font-black uppercase text-yellow-400">Adicionar / remover cards da tela inicial</p>
+              <span className="text-[10px] font-bold uppercase text-zinc-500">Clique para alterar</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
+              {MODULOS_DASHBOARD.map((modulo) => {
+                const ativo = modulosTelaInicial.includes(modulo.tela);
+                return (
+                  <button
+                    key={`gerenciar-${modulo.tela}`}
+                    type="button"
+                    onClick={() => ativo ? removerModulo(modulo.tela) : adicionarModulo(modulo.tela)}
+                    className={`flex min-w-0 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition ${
+                      ativo
+                        ? "border-red-500/50 bg-red-500/10 text-red-300"
+                        : "border-yellow-400/50 bg-yellow-400/10 text-yellow-300"
+                    }`}
+                    title={ativo ? "Remover da tela inicial" : "Adicionar à tela inicial"}
+                  >
+                    <span className="min-w-0 truncate text-xs font-black uppercase">
+                      {modulo.icone} {modulo.titulo}
+                    </span>
+                    <span className="shrink-0 text-base font-black">{ativo ? "−" : "+"}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="grid min-w-0 grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="min-w-0 overflow-hidden rounded-lg border border-yellow-400/30 bg-black/80 [&>div]:!p-1.5 [&>section]:!p-1.5 [&_p]:!hidden [&_h1]:!text-sm [&_h2]:!text-sm [&_h3]:!text-sm [&_button]:!min-h-0 [&_button]:!py-1.5 [&_button]:!px-2 [&_button]:!text-xs">
+            <CentralVozGlobal alterarTela={alterarTela} />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setCategoriaAberta("hoje")}
+            className="min-w-0 rounded-lg border border-yellow-400/40 bg-yellow-400/10 px-2 py-1.5 text-left transition hover:border-yellow-400"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase leading-tight text-yellow-300 sm:text-xs">📅 Compromissos de hoje</p>
+                <p className={`mt-0.5 truncate text-[11px] font-black leading-tight sm:text-sm ${tema === "claro" ? "text-zinc-950" : "text-white"}`}>
+                  {itensHoje.length === 0 ? "Nenhum compromisso para hoje." : resumoHoje}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-yellow-400 px-2 py-0.5 text-sm font-black text-black sm:text-base">{itensHoje.length}</span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCategoriaAberta("retorno")}
+            className={`min-w-0 rounded-lg border px-2 py-1.5 text-left transition sm:col-span-2 lg:col-span-1 ${indicadores.retorno > 0 ? "border-orange-400/60 bg-orange-400/10 hover:border-orange-400" : "border-zinc-800 bg-black/60"}`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className={`text-[10px] font-black uppercase leading-tight sm:text-xs ${indicadores.retorno > 0 ? "text-orange-400" : "text-zinc-500"}`}>🔔 Clientes que merecem atenção</p>
+                <p className={`mt-0.5 truncate text-[11px] font-black leading-tight sm:text-sm ${tema === "claro" ? "text-zinc-950" : "text-white"}`}>
+                  {indicadores.retorno > 0 ? `${indicadores.retorno} cliente(s) precisam de contato hoje.` : "Nenhum retorno pendente hoje."}
+                </p>
+              </div>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-sm font-black sm:text-base ${indicadores.retorno > 0 ? "bg-orange-400 text-black" : "bg-zinc-800 text-zinc-400"}`}>{indicadores.retorno}</span>
+            </div>
+          </button>
+        </div>
+          </div>
+        )}
+      </div>
+
+      <div className="pt-1.5">
+        <div className="mb-2 grid min-w-0 grid-cols-2 gap-[2px] overflow-hidden rounded-lg border-2 border-black bg-black sm:grid-cols-3 md:grid-cols-5">
+          <AtalhoTopo nome="Novo cliente" icone="👤" onClick={() => alterarTela("clientes")} tema={tema} />
+          <AtalhoTopo nome="Abrir funil" icone="📊" onClick={() => alterarTela("funil")} tema={tema} />
+          <AtalhoTopo nome="Proposta" icone="📄" onClick={() => alterarTela("propostas")} tema={tema} />
+          <AtalhoTopo nome="Agenda" icone="📅" onClick={() => alterarTela("agenda")} tema={tema} />
+          <AtalhoTopo nome="Recibo" icone="🧾" onClick={() => alterarTela("recibos")} tema={tema} />
+        </div>
+
+        {erro && (
+          <div className="mb-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+            {erro}
+          </div>
+        )}
+
+        {carregando && (
+          <div className="mb-2 rounded-xl border border-zinc-800 bg-black px-3 py-2 text-sm font-bold text-zinc-400">
+            Atualizando informações do Dashboard...
+          </div>
+        )}
+
+        {financeiroProximosVencimentos.quantidade > 0 && (
+          <section className="mb-2 rounded-xl border border-orange-400/50 bg-orange-400/10 p-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-black uppercase text-orange-300">💰 Próximos vencimentos</p>
+                <p className="mt-1 text-sm font-black leading-snug">
+                  {financeiroProximosVencimentos.quantidade} compromisso(s) financeiro(s) exigem atenção.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => alterarTela("financeiro")}
+                className="shrink-0 rounded-lg bg-orange-400 px-3 py-2 text-xs font-black uppercase text-black"
+              >
+                Abrir
+              </button>
+            </div>
+          </section>
+        )}
+
+        <div className="mb-1.5 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase text-yellow-400">Painel inicial</p>
+            <p className="text-xs text-zinc-500">
+              Seus módulos favoritos — até 5 por linha
+            </p>
+          </div>
+
+          {modoOrganizar && (
+            <button
+              type="button"
+              onClick={() => salvarModulosTelaInicial(MODULOS_DASHBOARD_PADRAO)}
+              className="rounded-lg border border-zinc-700 px-3 py-2 text-[11px] font-black uppercase text-zinc-300"
+            >
+              Restaurar padrão
+            </button>
+          )}
+        </div>
+
+        <div className="grid min-w-0 grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-5">
+          {modulosTelaInicial.map((tela) => {
+            const modulo = MODULOS_DASHBOARD.find((item) => item.tela === tela);
+            if (!modulo) return null;
+
+            return (
+              <div
+                key={`modulo-dashboard-${modulo.tela}`}
+                className={`tema-card relative min-w-0 overflow-hidden rounded-lg border bg-black p-2 transition ${
+                  modoOrganizar
+                    ? "border-yellow-400/60"
+                    : "border-zinc-800 hover:border-yellow-400/70"
+                }`}
+              >
+                {modoOrganizar && (
+                  <button
+                    type="button"
+                    onClick={() => removerModulo(modulo.tela)}
+                    className="absolute right-1.5 top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-red-500/60 bg-black text-xs font-black text-red-400"
+                    title="Remover somente da tela inicial"
+                  >
+                    ×
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={modoOrganizar}
+                  onClick={() => alterarTela(modulo.tela)}
+                  className="w-full min-w-0 text-left disabled:cursor-default"
+                >
+                  <span className="text-2xl drop-shadow-sm">
+                    {modulo.icone}
+                  </span>
+                  <p className="tema-titulo mt-1 break-words text-[10px] font-black uppercase leading-tight text-zinc-300 sm:text-[11px] md:text-sm">
+                    {modulo.titulo}
+                  </p>
+
+                  {(() => {
+                    const metrica = metricasModulo(modulo.tela);
+                    return (
+                      <>
+                        {metrica.valor !== null && (
+                          <p className="tema-valor mt-0.5 text-2xl font-black leading-none text-yellow-400 md:text-3xl">
+                            {metrica.valor}
+                          </p>
+                        )}
+                        {metrica.detalhe && (
+                          <p className="mt-1 line-clamp-2 text-[9px] font-bold leading-tight text-zinc-500 sm:text-[10px]">
+                            {metrica.detalhe}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  <p className="mt-1 text-[10px] font-black uppercase text-yellow-400">
+                    Abrir →
+                  </p>
+                </button>
+
+                {modoOrganizar && (
+                  <div className="mt-2 grid grid-cols-4 gap-1">
+                    <button type="button" onClick={() => moverModulo(modulo.tela, -1)} className="rounded-md border border-zinc-700 py-1 text-xs">←</button>
+                    <button type="button" onClick={() => moverModulo(modulo.tela, 1)} className="rounded-md border border-zinc-700 py-1 text-xs">→</button>
+                    <button type="button" onClick={() => moverModulo(modulo.tela, -5)} className="rounded-md border border-zinc-700 py-1 text-xs">↑</button>
+                    <button type="button" onClick={() => moverModulo(modulo.tela, 5)} className="rounded-md border border-zinc-700 py-1 text-xs">↓</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {modoOrganizar && (
+          <div className="mt-4 rounded-2xl border border-dashed border-yellow-400/40 bg-yellow-400/5 p-3">
+            <p className="text-xs font-black uppercase text-yellow-300">
+              Adicionar à tela inicial
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {MODULOS_DASHBOARD
+                .filter((modulo) => !modulosTelaInicial.includes(modulo.tela))
+                .map((modulo) => (
+                  <button
+                    key={`adicionar-modulo-${modulo.tela}`}
+                    type="button"
+                    onClick={() => adicionarModulo(modulo.tela)}
+                    className="rounded-lg border border-yellow-400/30 bg-black px-3 py-2 text-xs font-black text-yellow-300"
+                  >
+                    + {modulo.icone} {modulo.titulo}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
+
+        <div className="tema-card mt-2 rounded-lg border border-yellow-400/30 bg-black p-2">
+          <button
+            type="button"
+            onClick={() => alterarTela("funil")}
+            className="flex w-full items-center justify-between gap-3 text-left"
+          >
+            <h3 className="text-base font-black uppercase text-yellow-400 md:text-xl">Resumo do funil</h3>
+            <span className="text-[11px] font-black uppercase text-yellow-300">Abrir funil →</span>
+          </button>
+          <div className="mt-1.5 grid min-w-0 grid-cols-3 gap-1.5">
+            <Resumo
+              nome="Novo contato"
+              valor={indicadores.novoContato}
+              onClick={() => alterarTela("funil")}
+            />
+            <Resumo
+              nome="Negociação"
+              valor={indicadores.negociacao}
+              onClick={() => alterarTela("funil")}
+            />
+            <Resumo
+              nome="Pós-venda"
+              valor={indicadores.posVenda}
+              onClick={() => alterarTela("funil")}
+            />
           </div>
         </div>
+
       </div>
 
       {categoriaAberta && (
@@ -1808,6 +1833,33 @@ function Info({ titulo, valor }: { titulo: string; valor: string }) {
   );
 }
 
+function AtalhoTopo({
+  nome,
+  icone,
+  onClick,
+  tema,
+}: {
+  nome: string;
+  icone: string;
+  onClick: () => void;
+  tema: "claro" | "escuro";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex min-h-9 items-center justify-center gap-2 border-r border-b px-2 py-1.5 text-center text-[11px] font-black uppercase transition sm:text-xs md:border-b-0 ${
+        tema === "claro"
+          ? "border-white/20 bg-black text-white hover:bg-yellow-400 hover:text-black"
+          : "border-black/25 bg-yellow-400 text-black hover:bg-black hover:text-white"
+      }`}
+    >
+      <span className="text-sm">{icone}</span>
+      <span>{nome}</span>
+    </button>
+  );
+}
+
 function Atalho({
   nome,
   icone,
@@ -1821,7 +1873,7 @@ function Atalho({
     <button
       type="button"
       onClick={onClick}
-      className="flex min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-yellow-400/30 bg-zinc-950 px-2 py-2 text-[10px] font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black sm:text-[11px] md:flex-row md:gap-2 md:px-3 md:py-3 md:text-[13px]"
+      className="flex min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-xl border border-yellow-400/30 bg-zinc-950 px-2 py-2 text-[10px] font-black uppercase text-yellow-400 transition hover:bg-yellow-400 hover:text-black sm:text-[11px] md:flex-row md:gap-2 md:px-3 md:py-2 md:text-[13px]"
     >
       <span className="shrink-0 text-base">{icone}</span>
       <span className="min-w-0 break-words text-center leading-tight">{nome}</span>
@@ -1854,7 +1906,7 @@ function Resumo({
       <button
         type="button"
         onClick={onClick}
-        className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-3 text-left transition hover:border-yellow-400/70 hover:bg-yellow-400/5"
+        className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2 text-left transition hover:border-yellow-400/70 hover:bg-yellow-400/5"
         title={`Abrir Funil — ${nome}`}
       >
         {conteudo}

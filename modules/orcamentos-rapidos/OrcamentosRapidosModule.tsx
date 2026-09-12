@@ -43,23 +43,23 @@ type ModoComposicao = "material-instalacao" | "somente-instalacao" | "somente-ma
 
 const SUBSERVICOS: Record<TipoOrcamentoRapido, string[]> = {
   "seguranca-eletronica": [
-    "CFTV / Câmeras",
-    "Cerca Elétrica + Alarme",
-    "Motores / Portões",
+    "CFTV / CÃƒÂ¢meras",
+    "Cerca ElÃƒÂ©trica + Alarme",
+    "Motores / PortÃƒÂµes",
     "Interfone / Videoporteiro",
     "Controle de Acesso",
   ],
   eletrica: [
-    "Elétrica Geral",
-    "Quadros e Proteções",
+    "ElÃƒÂ©trica Geral",
+    "Quadros e ProteÃƒÂ§ÃƒÂµes",
     "Cabos e Infraestrutura",
     "Tomadas e Comandos",
-    "Iluminação",
+    "IluminaÃƒÂ§ÃƒÂ£o",
   ],
   automacao: [
     "Fechaduras Digitais",
-    "Iluminação e Comandos",
-    "Sensores e Segurança",
+    "IluminaÃƒÂ§ÃƒÂ£o e Comandos",
+    "Sensores e SeguranÃƒÂ§a",
     "Motores e Aberturas",
     "Assistentes e Hubs",
     "Rede e Infraestrutura",
@@ -73,7 +73,7 @@ type Props = {
 };
 
 const supabase = createClient();
-const ENDERECO_EMPRESA_PADRAO = "Rodovia dos Náufragos, Robalo, 710 - Aracaju/SE";
+const ENDERECO_EMPRESA_PADRAO = "Rodovia dos NÃƒÂ¡ufragos, Robalo, 710 - Aracaju/SE";
 const TELEFONE_EMPRESA = "(79) 9.9939-0653";
 const INSTAGRAM_EMPRESA = "@CHOQUESEG";
 
@@ -84,22 +84,22 @@ const CONFIG_ORCAMENTO: Record<TipoOrcamentoRapido, {
   categorias: string[];
 }> = {
   "seguranca-eletronica": {
-    titulo: "Segurança Eletrônica",
-    tipoServico: "Segurança Eletrônica",
-    origem: "Orçamento Segurança Eletrônica",
-    categorias: ["Segurança Eletrônica", "Mão de Obra"],
+    titulo: "SeguranÃƒÂ§a EletrÃƒÂ´nica",
+    tipoServico: "SeguranÃƒÂ§a EletrÃƒÂ´nica",
+    origem: "OrÃƒÂ§amento SeguranÃƒÂ§a EletrÃƒÂ´nica",
+    categorias: ["SeguranÃƒÂ§a EletrÃƒÂ´nica", "MÃƒÂ£o de Obra"],
   },
   eletrica: {
-    titulo: "Elétrica",
-    tipoServico: "Elétrica",
-    origem: "Orçamento Elétrica",
-    categorias: ["Elétrica", "Mão de Obra"],
+    titulo: "ElÃƒÂ©trica",
+    tipoServico: "ElÃƒÂ©trica",
+    origem: "OrÃƒÂ§amento ElÃƒÂ©trica",
+    categorias: ["ElÃƒÂ©trica", "MÃƒÂ£o de Obra"],
   },
   automacao: {
-    titulo: "Automação / Casa Inteligente",
-    tipoServico: "Automação",
-    origem: "Orçamento Automação",
-    categorias: ["Automação", "Casa Inteligente", "Mão de Obra"],
+    titulo: "AutomaÃƒÂ§ÃƒÂ£o / Casa Inteligente",
+    tipoServico: "AutomaÃƒÂ§ÃƒÂ£o",
+    origem: "OrÃƒÂ§amento AutomaÃƒÂ§ÃƒÂ£o",
+    categorias: ["AutomaÃƒÂ§ÃƒÂ£o", "Casa Inteligente", "MÃƒÂ£o de Obra"],
   },
 };
 
@@ -133,7 +133,7 @@ function escaparHtml(valor: string) {
 function inferirUnidade(nome: string) {
   const texto = nome.toLowerCase();
   if (texto.includes("cabo") || texto.includes("fio")) return "Metro";
-  if (texto.includes("mão de obra") || texto.includes("instalação")) return "Serviço";
+  if (texto.includes("mÃƒÂ£o de obra") || texto.includes("instalaÃƒÂ§ÃƒÂ£o")) return "ServiÃƒÂ§o";
   if (texto.includes("kit")) return "Kit";
   if (texto.includes("rolo")) return "Rolo";
   if (texto.includes("caixa")) return "Caixa";
@@ -141,14 +141,14 @@ function inferirUnidade(nome: string) {
 }
 
 function segmentoDoTipo(tipo: TipoOrcamentoRapido) {
-  if (tipo === "seguranca-eletronica") return "Segurança eletrônica";
-  if (tipo === "eletrica") return "Elétrica";
+  if (tipo === "seguranca-eletronica") return "SeguranÃƒÂ§a eletrÃƒÂ´nica";
+  if (tipo === "eletrica") return "ElÃƒÂ©trica";
   return "Casa inteligente";
 }
 
 function categoriaEstoqueDoTipo(tipo: TipoOrcamentoRapido) {
-  if (tipo === "eletrica") return "Proteção elétrica";
-  if (tipo === "automacao") return "Automação";
+  if (tipo === "eletrica") return "ProteÃƒÂ§ÃƒÂ£o elÃƒÂ©trica";
+  if (tipo === "automacao") return "AutomaÃƒÂ§ÃƒÂ£o";
   return "Outros";
 }
 
@@ -221,7 +221,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
   const [mensagemPadrao, setMensagemPadrao] = useState(
-    "Olá, {primeiro_nome}! Tudo bem?\n\nPreparei seu orçamento de {tipo_servico}.\n\n{itens}\n\nValor total: {valor_total}.\n\nEstou enviando o orçamento em PDF para sua análise. Qualquer dúvida, estou à disposição.\n\nEquipe CHOQUESEG"
+    "OlÃƒÂ¡, {primeiro_nome}! Tudo bem?\n\nPreparei seu orÃƒÂ§amento de {tipo_servico}.\n\n{itens}\n\nValor total: {valor_total}.\n\nEstou enviando o orÃƒÂ§amento em PDF para sua anÃƒÂ¡lise. Qualquer dÃƒÂºvida, estou ÃƒÂ  disposiÃƒÂ§ÃƒÂ£o.\n\nEquipe CHOQUESEG"
   );
   const [mensagemEnvio, setMensagemEnvio] = useState("");
   const [salvandoMensagem, setSalvandoMensagem] = useState(false);
@@ -243,8 +243,8 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
       if (!ativo) return;
 
       if (error) {
-        console.error("Erro ao carregar catálogo do orçamento:", error);
-        setErro(`Não foi possível carregar os produtos cadastrados: ${error.message}`);
+        console.error("Erro ao carregar catÃƒÂ¡logo do orÃƒÂ§amento:", error);
+        setErro(`NÃƒÂ£o foi possÃƒÂ­vel carregar os produtos cadastrados: ${error.message}`);
         setCarregandoProdutos(false);
         return;
       }
@@ -303,7 +303,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
         );
       } catch (e: any) {
         console.error("Erro ao carregar clientes:", e);
-        setErro(e?.message || "Não foi possível carregar os clientes.");
+        setErro(e?.message || "NÃƒÂ£o foi possÃƒÂ­vel carregar os clientes.");
       } finally {
         setCarregando(false);
       }
@@ -355,7 +355,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
         .eq("chave", "orcamento-rapido")
         .maybeSingle();
       if (error) {
-        console.error("Erro ao carregar mensagem padrão:", error);
+        console.error("Erro ao carregar mensagem padrÃƒÂ£o:", error);
         return;
       }
       if (data?.mensagem) setMensagemPadrao(String(data.mensagem));
@@ -365,7 +365,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
 
   async function salvarMensagemPadrao() {
     if (!mensagemPadrao.trim()) {
-      alert("Digite a mensagem padrão antes de salvar.");
+      alert("Digite a mensagem padrÃƒÂ£o antes de salvar.");
       return;
     }
     setSalvandoMensagem(true);
@@ -381,10 +381,10 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
           { onConflict: "chave" },
         );
       if (error) throw error;
-      alert("Mensagem padrão salva com sucesso.");
+      alert("Mensagem padrÃƒÂ£o salva com sucesso.");
     } catch (e) {
-      console.error("Erro ao salvar mensagem padrão:", e);
-      alert("Não foi possível salvar a mensagem padrão.");
+      console.error("Erro ao salvar mensagem padrÃƒÂ£o:", e);
+      alert("NÃƒÂ£o foi possÃƒÂ­vel salvar a mensagem padrÃƒÂ£o.");
     } finally {
       setSalvandoMensagem(false);
     }
@@ -396,7 +396,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
       .filter((item) => item.descricao.trim())
       .map(
         (item) =>
-          `• ${item.descricao} — ${item.quantidade} ${item.unidade} x ${moeda(item.valorUnitario)}`,
+          `Ã¢â‚¬Â¢ ${item.descricao} Ã¢â‚¬â€ ${item.quantidade} ${item.unidade} x ${moeda(item.valorUnitario)}`,
       )
       .join("\n");
 
@@ -404,7 +404,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
       .replaceAll("{primeiro_nome}", primeiroNome)
       .replaceAll("{nome_cliente}", nome.trim() || "cliente")
       .replaceAll("{tipo_servico}", config.titulo)
-      .replaceAll("{itens}", resumoItens || "Itens conforme orçamento em PDF")
+      .replaceAll("{itens}", resumoItens || "Itens conforme orÃƒÂ§amento em PDF")
       .replaceAll("{subtotal}", moeda(subtotal))
       .replaceAll("{materiais}", moeda(subtotalMateriais))
       .replaceAll("{mao_obra}", moeda(subtotalMaoObra))
@@ -477,7 +477,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
     const custo = Number(novoProdutoCusto.replace(",", ".")) || 0;
     const venda = Number(novoProdutoVenda.replace(",", ".")) || 0;
     if (custo < 0 || venda < 0) {
-      alert("Custo e valor de venda não podem ser negativos.");
+      alert("Custo e valor de venda nÃƒÂ£o podem ser negativos.");
       return;
     }
 
@@ -510,8 +510,8 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
     setSalvandoProduto(false);
 
     if (error) {
-      console.error("Erro ao cadastrar produto pelo orçamento:", error);
-      alert(`Não foi possível cadastrar o produto: ${error.message}`);
+      console.error("Erro ao cadastrar produto pelo orÃƒÂ§amento:", error);
+      alert(`NÃƒÂ£o foi possÃƒÂ­vel cadastrar o produto: ${error.message}`);
       return;
     }
 
@@ -541,7 +541,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
     setNovoProdutoCusto("");
     setNovoProdutoVenda("");
     setCadastroProdutoAberto(false);
-    alert("Produto cadastrado na nuvem e disponível no orçamento.");
+    alert("Produto cadastrado na nuvem e disponÃƒÂ­vel no orÃƒÂ§amento.");
   }
 
   async function excluirProdutoDoCatalogo() {
@@ -552,12 +552,12 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
 
     const produto = produtosCatalogo.find((item) => item.id === produtoParaExcluirId);
     if (!produto) {
-      alert("Produto não encontrado.");
+      alert("Produto nÃƒÂ£o encontrado.");
       return;
     }
 
     const confirmar = window.confirm(
-      `Excluir "${produto.nome}" do catálogo?\n\nEle deixará de aparecer nos próximos orçamentos.`
+      `Excluir "${produto.nome}" do catÃƒÂ¡logo?\n\nEle deixarÃƒÂ¡ de aparecer nos prÃƒÂ³ximos orÃƒÂ§amentos.`
     );
     if (!confirmar) return;
 
@@ -572,7 +572,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
 
     if (error) {
       console.error("Erro ao excluir produto:", error);
-      alert(`Não foi possível excluir o produto: ${error.message}`);
+      alert(`NÃƒÂ£o foi possÃƒÂ­vel excluir o produto: ${error.message}`);
       return;
     }
 
@@ -580,8 +580,8 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
       atuais.filter((item) => item.id !== produtoParaExcluirId)
     );
 
-    // Se o produto já estiver usado no orçamento atual, mantém a descrição/valor
-    // e transforma o item em manual para não perder o orçamento.
+    // Se o produto jÃƒÂ¡ estiver usado no orÃƒÂ§amento atual, mantÃƒÂ©m a descriÃƒÂ§ÃƒÂ£o/valor
+    // e transforma o item em manual para nÃƒÂ£o perder o orÃƒÂ§amento.
     setItens((atuais) =>
       atuais.map((item) =>
         item.produtoId === produtoParaExcluirId
@@ -591,7 +591,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
     );
 
     setProdutoParaExcluirId("");
-    alert("Produto excluído do catálogo.");
+    alert("Produto excluÃƒÂ­do do catÃƒÂ¡logo.");
   }
 
   function adicionarItem() {
@@ -611,7 +611,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
       return false;
     }
     if (!itens.some((item) => item.descricao.trim())) {
-      alert("Adicione pelo menos um item ou serviço ao orçamento.");
+      alert("Adicione pelo menos um item ou serviÃƒÂ§o ao orÃƒÂ§amento.");
       return false;
     }
     return true;
@@ -648,7 +648,7 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
       return true;
     } catch (e: any) {
       console.error("Erro ao cadastrar cliente:", e);
-      alert(`Não foi possível cadastrar o cliente: ${e?.message || "erro desconhecido"}. O orçamento não foi perdido.`);
+      alert(`NÃƒÂ£o foi possÃƒÂ­vel cadastrar o cliente: ${e?.message || "erro desconhecido"}. O orÃƒÂ§amento nÃƒÂ£o foi perdido.`);
       return false;
     } finally {
       setSalvandoCliente(false);
@@ -665,21 +665,21 @@ export default function OrcamentosRapidosModule({ tipo = "seguranca-eletronica" 
         <td class="direita forte">${moeda(item.quantidade * item.valorUnitario)}</td>
       </tr>`).join("");
     const descontoLabel = tipoDesconto === "percentual" ? `Desconto (${Math.min(Number(desconto || 0), 100)}%)` : "Desconto";
-    return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>Orçamento ${escaparHtml(config.titulo)} - ${escaparHtml(nome)}</title>
+    return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/><title>OrÃƒÂ§amento ${escaparHtml(config.titulo)} - ${escaparHtml(nome)}</title>
 <style>
 @page{size:A4;margin:13mm}*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;background:#fff;color:#111}.pagina{width:100%;max-width:760px;margin:0 auto;border:1px solid #ddd}.cabecalho{background:#080808;overflow:hidden;border-bottom:4px solid #facc15}.cabecalho img{width:100%;height:auto;display:block;object-fit:contain;object-position:center top}.corpo{padding:22px}.titulo{margin:0 0 16px;font-size:27px;line-height:1.15}.dados{display:grid;grid-template-columns:1fr 1fr;gap:9px 18px;background:#f4f4f4;border:1px solid #ddd;padding:14px 16px}.dados p{margin:0;font-size:14px;line-height:1.4}table{width:100%;border-collapse:collapse;margin-top:18px;table-layout:fixed}th,td{border-bottom:1px solid #ddd;padding:10px 8px;font-size:13px;line-height:1.35}th{background:#111;color:#facc15;text-align:left}th:nth-child(1){width:42%}th:nth-child(2){width:12%}th:nth-child(3){width:10%}th:nth-child(4),th:nth-child(5){width:18%}.centro{text-align:center}.direita{text-align:right}.forte{font-weight:800}.totais{margin:18px 0 0 auto;width:330px;font-size:14px}.linha{display:flex;justify-content:space-between;padding:4px 0}.final{border-top:2px solid #111;margin-top:6px;padding-top:10px;font-size:24px;font-weight:900}.obs{margin-top:18px;border:1px solid #ddd;padding:13px;font-size:13px;line-height:1.45;white-space:pre-wrap}.convite-fechar{margin:22px 0 8px;text-align:center;font-size:15px;line-height:1.45;font-weight:700}.fechar{display:block;margin-top:10px;background:#facc15;color:#111;padding:18px 14px;text-align:center;font-size:20px;font-weight:900;text-decoration:none;border-radius:8px;border:2px solid #111}.rodape{width:100%;background:#080808;color:#fff;border-top:3px solid #facc15;padding:14px 16px;display:flex;align-items:center;gap:14px;font-size:12px;font-weight:700}.rodape img{width:44px;height:44px;object-fit:contain}.rodape .contato{display:flex;flex-wrap:wrap;gap:7px 18px;align-items:center;line-height:1.35}.rodape strong{color:#facc15;font-size:13px}@media print{.pagina{border:none}.fechar{color:#111!important}}
 </style></head><body><div class="pagina">
-<div class="cabecalho"><img src="/orcamentos/cabecalho-seguranca-visual.png" alt="CHOQUESEG — Segurança, elétrica e automação"/></div>
-<div class="corpo"><h2 class="titulo">ORÇAMENTO — ${escaparHtml(config.titulo.toUpperCase())}</h2><div class="dados"><p><strong>Cliente:</strong> ${escaparHtml(nome)}</p><p><strong>Telefone:</strong> ${escaparHtml(telefone || "—")}</p><p><strong>Cidade:</strong> ${escaparHtml(cidade || "—")}</p><p><strong>Endereço:</strong> ${escaparHtml(endereco || "—")}</p></div>
-<table><thead><tr><th>Descrição</th><th>Unid.</th><th>Qtd.</th><th>Unitário</th><th>Total</th></tr></thead><tbody>${linhas}</tbody></table>
-<div class="totais"><div class="linha"><span>Materiais</span><strong>${moeda(subtotalMateriais)}</strong></div><div class="linha"><span>Mão de obra / instalação</span><strong>${moeda(subtotalMaoObra)}</strong></div><div class="linha"><span>${descontoLabel}</span><strong>- ${moeda(valorDesconto)}</strong></div><div class="linha final"><span>TOTAL</span><span>${moeda(total)}</span></div></div>
-${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composição:</strong><br/>Equipamento/material fornecido pelo cliente. Este orçamento refere-se à instalação/mão de obra.</div>` : ""}${observacoes.trim() ? `<div class="obs"><strong>Observações:</strong><br/>${escaparHtml(observacoes).replace(/\n/g, "<br/>")}</div>` : ""}<div class="convite-fechar">Gostou do orçamento? Para confirmar o serviço, responda à mensagem enviada pela CHOQUESEG.</div><div class="fechar">🤝 QUERO FECHAR COM A CHOQUESEG</div></div>
+<div class="cabecalho"><img src="/orcamentos/cabecalho-seguranca-visual.png" alt="CHOQUESEG Ã¢â‚¬â€ SeguranÃƒÂ§a, elÃƒÂ©trica e automaÃƒÂ§ÃƒÂ£o"/></div>
+<div class="corpo"><h2 class="titulo">ORÃƒâ€¡AMENTO Ã¢â‚¬â€ ${escaparHtml(config.titulo.toUpperCase())}</h2><div class="dados"><p><strong>Cliente:</strong> ${escaparHtml(nome)}</p><p><strong>Telefone:</strong> ${escaparHtml(telefone || "Ã¢â‚¬â€")}</p><p><strong>Cidade:</strong> ${escaparHtml(cidade || "Ã¢â‚¬â€")}</p><p><strong>EndereÃƒÂ§o:</strong> ${escaparHtml(endereco || "Ã¢â‚¬â€")}</p></div>
+<table><thead><tr><th>DescriÃƒÂ§ÃƒÂ£o</th><th>Unid.</th><th>Qtd.</th><th>UnitÃƒÂ¡rio</th><th>Total</th></tr></thead><tbody>${linhas}</tbody></table>
+<div class="totais"><div class="linha"><span>Materiais</span><strong>${moeda(subtotalMateriais)}</strong></div><div class="linha"><span>MÃƒÂ£o de obra / instalaÃƒÂ§ÃƒÂ£o</span><strong>${moeda(subtotalMaoObra)}</strong></div><div class="linha"><span>${descontoLabel}</span><strong>- ${moeda(valorDesconto)}</strong></div><div class="linha final"><span>TOTAL</span><span>${moeda(total)}</span></div></div>
+${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>ComposiÃƒÂ§ÃƒÂ£o:</strong><br/>Equipamento/material fornecido pelo cliente. Este orÃƒÂ§amento refere-se ÃƒÂ  instalaÃƒÂ§ÃƒÂ£o/mÃƒÂ£o de obra.</div>` : ""}${observacoes.trim() ? `<div class="obs"><strong>ObservaÃƒÂ§ÃƒÂµes:</strong><br/>${escaparHtml(observacoes).replace(/\n/g, "<br/>")}</div>` : ""}<div class="convite-fechar">Gostou do orÃƒÂ§amento? Para confirmar o serviÃƒÂ§o, responda ÃƒÂ  mensagem enviada pela CHOQUESEG.</div><div class="fechar">Ã°Å¸Â¤Â QUERO FECHAR COM A CHOQUESEG</div></div>
 <div class="rodape"><img src="/imagens/logo/brasao-choqueseg.png"/><div class="contato"><strong>CHOQUESEG</strong><span>${TELEFONE_EMPRESA}</span><span>${INSTAGRAM_EMPRESA}</span><span>${escaparHtml(enderecoEmpresa)}</span></div></div></div></body></html>`;
   }
 
 
   async function criarPDFOrcamento(): Promise<Blob> {
-    if (!validar()) throw new Error("Revise os dados do orçamento.");
+    if (!validar()) throw new Error("Revise os dados do orÃƒÂ§amento.");
     const host = document.createElement("div");
     host.style.cssText = "position:fixed;left:-10000px;top:0;width:794px;background:#fff;";
     const frame = document.createElement("iframe");
@@ -688,11 +688,11 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
 
     try {
       const doc = frame.contentDocument;
-      if (!doc) throw new Error("Não foi possível preparar o orçamento.");
+      if (!doc) throw new Error("NÃƒÂ£o foi possÃƒÂ­vel preparar o orÃƒÂ§amento.");
       doc.open(); doc.write(htmlOrcamento()); doc.close();
       await new Promise<void>((resolve) => setTimeout(resolve, 500));
       const pagina = doc.querySelector<HTMLElement>(".pagina");
-      if (!pagina) throw new Error("Não foi possível localizar o orçamento.");
+      if (!pagina) throw new Error("NÃƒÂ£o foi possÃƒÂ­vel localizar o orÃƒÂ§amento.");
       await Promise.all(Array.from(doc.images).map((img) => img.complete ? Promise.resolve() : new Promise<void>((resolve) => {
         img.onload = () => resolve(); img.onerror = () => resolve();
       })));
@@ -714,13 +714,13 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
       setPreviewAberto(true);
     } catch (e) {
       console.error("Erro ao visualizar PDF:", e);
-      alert(e instanceof Error ? e.message : "Não foi possível visualizar o PDF.");
+      alert(e instanceof Error ? e.message : "NÃƒÂ£o foi possÃƒÂ­vel visualizar o PDF.");
     }
   }
 
   function baixarPdfVisualizado() {
     if (!previewPdfBlob) return;
-    const nomeArquivo = nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+    const nomeArquivo = nome.trim().replace(/[^a-zA-ZÃƒâ‚¬-ÃƒÂ¿0-9]+/g, "-") || "Cliente";
     const url = URL.createObjectURL(previewPdfBlob);
     const link = document.createElement("a");
     link.href = url;
@@ -735,24 +735,35 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
     if (!previewPdfUrl) return;
     const janela = window.open(previewPdfUrl, "_blank");
     if (!janela) {
-      alert("Permita pop-ups para abrir a impressão.");
+      alert("Permita pop-ups para abrir a impressÃƒÂ£o.");
       return;
     }
     setTimeout(() => janela.print(), 700);
+  }
+
+  async function copiarMensagemEnvio() {
+    const mensagem = mensagemEnvio.trim() || montarMensagemDoModelo();
+    try {
+      await navigator.clipboard.writeText(mensagem);
+      return true;
+    } catch (e) {
+      console.warn("NÃƒÂ£o foi possÃƒÂ­vel copiar a mensagem automaticamente:", e);
+      return false;
+    }
   }
 
   async function enviarPdfVisualizado() {
     if (!previewPdfBlob) return;
     const numeroCliente = somenteNumeros(telefone);
     if (numeroCliente.length < 10) {
-      alert("Informe um telefone/WhatsApp válido do cliente.");
+      alert("Informe um telefone/WhatsApp vÃƒÂ¡lido do cliente.");
       return;
     }
 
     const registro = await registrarEnvioNoFunil();
     if (!registro) return;
 
-    const nomeArquivo = nome.trim().replace(/[^a-zA-ZÀ-ÿ0-9]+/g, "-") || "Cliente";
+    const nomeArquivo = nome.trim().replace(/[^a-zA-ZÃƒâ‚¬-ÃƒÂ¿0-9]+/g, "-") || "Cliente";
     const arquivo = new File(
       [previewPdfBlob],
       `Orcamento-CHOQUESEG-${nomeArquivo}.pdf`,
@@ -768,11 +779,18 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
         navigator.share &&
         (!navegador.canShare || navegador.canShare({ files: [arquivo] }))
       ) {
+        // Alguns celulares/WhatsApp recebem o PDF pelo compartilhamento nativo,
+        // mas ignoram o campo de texto. Mantemos a mensagem tambÃƒÂ©m no clipboard
+        // para que ela nunca seja perdida no envio.
+        const mensagemCopiada = await copiarMensagemEnvio();
         await navigator.share({
-          title: `Orçamento CHOQUESEG - ${nome}`,
+          title: `OrÃƒÂ§amento CHOQUESEG - ${nome}`,
           text: mensagem,
           files: [arquivo],
         });
+        if (mensagemCopiada) {
+          alert("PDF compartilhado. A mensagem tambÃƒÂ©m ficou copiada; se o WhatsApp nÃƒÂ£o preencher o texto automaticamente, basta tocar e colar.");
+        }
         return;
       }
 
@@ -788,7 +806,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       console.error("Erro ao preparar envio:", e);
-      alert("Não foi possível preparar o envio.");
+      alert("NÃƒÂ£o foi possÃƒÂ­vel preparar o envio.");
     }
   }
 
@@ -797,7 +815,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
 
     const janela = window.open("", "_blank", "width=900,height=900");
     if (!janela) {
-      alert("O navegador bloqueou a prévia do orçamento. Permita pop-ups e tente novamente.");
+      alert("O navegador bloqueou a prÃƒÂ©via do orÃƒÂ§amento. Permita pop-ups e tente novamente.");
       return;
     }
 
@@ -850,7 +868,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               endereco: endereco.trim(),
               tipo_servico: config.tipoServico,
               origem: config.origem,
-              status: "Orçamento Enviado",
+              status: "OrÃƒÂ§amento Enviado",
               retorno_em: retornoEm,
               observacoes: observacoes.trim(),
             })
@@ -858,7 +876,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
             .single();
 
           if (erroCriacao) throw erroCriacao;
-          if (!criado?.id) throw new Error("O cliente não foi criado no CRM.");
+          if (!criado?.id) throw new Error("O cliente nÃƒÂ£o foi criado no CRM.");
 
           idCliente = String(criado.id);
 
@@ -883,7 +901,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
       const { error: erroAtualizacao } = await supabase
         .from("clientes")
         .update({
-          status: "Orçamento Enviado",
+          status: "OrÃƒÂ§amento Enviado",
           retorno_em: retornoEm,
           tipo_servico: config.tipoServico,
           origem: config.origem,
@@ -894,11 +912,11 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
 
       return { idCliente, retornoEm };
     } catch (e: any) {
-      console.error("Erro ao registrar orçamento no Funil:", e);
+      console.error("Erro ao registrar orÃƒÂ§amento no Funil:", e);
       alert(
-        `Não foi possível registrar o envio no Funil: ${
+        `NÃƒÂ£o foi possÃƒÂ­vel registrar o envio no Funil: ${
           e?.message || "erro desconhecido"
-        }. O WhatsApp não será aberto para evitar perder o acompanhamento.`,
+        }. O WhatsApp nÃƒÂ£o serÃƒÂ¡ aberto para evitar perder o acompanhamento.`,
       );
       return null;
     } finally {
@@ -923,14 +941,14 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
         <header className="overflow-hidden border-b-4 border-yellow-400 bg-black">
           <img
             src="/orcamentos/cabecalho-seguranca-visual.png"
-            alt="CHOQUESEG — Segurança, elétrica e automação"
+            alt="CHOQUESEG Ã¢â‚¬â€ SeguranÃƒÂ§a, elÃƒÂ©trica e automaÃƒÂ§ÃƒÂ£o"
             className="h-auto w-full object-contain object-top"
           />
         </header>
 
         <div className={`space-y-5 p-4 md:p-6 ${painelClaro ? "bg-white text-zinc-950" : "bg-black text-white"}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><p className="text-xs font-black uppercase tracking-[.18em] text-yellow-500">CHOQUESEG</p><h2 className="text-xl font-black uppercase md:text-2xl">Orçamento — {config.titulo}</h2></div>
+            <div><p className="text-xs font-black uppercase tracking-[.18em] text-yellow-500">CHOQUESEG</p><h2 className="text-xl font-black uppercase md:text-2xl">OrÃƒÂ§amento Ã¢â‚¬â€ {config.titulo}</h2></div>
             <div className="flex items-center gap-2 rounded-xl border border-zinc-700 p-1 text-xs font-black uppercase">
               <span className="px-2 text-zinc-500">Tema da tela</span>
               <button type="button" onClick={() => setTema("claro")} className={`rounded-lg px-3 py-2 ${tema === "claro" ? "bg-yellow-400 text-black" : "text-zinc-400"}`}>Claro</button>
@@ -942,33 +960,33 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
 
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-zinc-700 p-2">
             <button type="button" onClick={() => trocarModoCliente("cadastrado")} className={`rounded-xl px-3 py-3 text-sm font-black uppercase ${modoCliente === "cadastrado" ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}>Cliente cadastrado</button>
-            <button type="button" onClick={() => trocarModoCliente("avulso")} className={`rounded-xl px-3 py-3 text-sm font-black uppercase ${modoCliente === "avulso" ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}>Cliente não cadastrado</button>
+            <button type="button" onClick={() => trocarModoCliente("avulso")} className={`rounded-xl px-3 py-3 text-sm font-black uppercase ${modoCliente === "avulso" ? "bg-yellow-400 text-black" : "bg-zinc-900 text-zinc-300"}`}>Cliente nÃƒÂ£o cadastrado</button>
           </div>
 
-          {modoCliente === "cadastrado" && <label className="block"><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Buscar cliente</span><select value={clienteId} onChange={(e) => selecionarCliente(e.target.value)} disabled={carregando} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"><option value="">{carregando ? "Carregando..." : "Selecione um cliente"}</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></label>}
+          {modoCliente === "cadastrado" && <label className="block"><span className="mb-1 block text-sm font-black uppercase text-zinc-500">Buscar cliente</span><select value={clienteId} onChange={(e) => selecionarCliente(e.target.value)} disabled={carregando} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white outline-none focus:border-yellow-400"><option value="">{carregando ? "Carregando..." : "Selecione um cliente"}</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></label>}
 
           <div className="grid gap-3 md:grid-cols-2">
             <Campo titulo="Nome" valor={nome} aoAlterar={setNome} />
             <Campo titulo="Telefone / WhatsApp" valor={telefone} aoAlterar={setTelefone} />
             <Campo titulo="Cidade" valor={cidade} aoAlterar={setCidade} />
-            <Campo titulo="Endereço" valor={endereco} aoAlterar={setEndereco} />
+            <Campo titulo="EndereÃƒÂ§o" valor={endereco} aoAlterar={setEndereco} />
           </div>
 
-          {modoCliente === "avulso" && <label className="flex items-center gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-3 text-sm font-bold"><input type="checkbox" checked={salvarComoCliente} onChange={(e) => setSalvarComoCliente(e.target.checked)} className="h-4 w-4 accent-yellow-400" /><span>Salvar também como cliente no CHOQUESEG PRO</span></label>}
+          {modoCliente === "avulso" && <label className="flex items-center gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-3 text-sm font-bold"><input type="checkbox" checked={salvarComoCliente} onChange={(e) => setSalvarComoCliente(e.target.checked)} className="h-4 w-4 accent-yellow-400" /><span>Salvar tambÃƒÂ©m como cliente no CHOQUESEG PRO</span></label>}
 
           <section className="rounded-2xl border border-zinc-700 p-3 md:p-4">
-            <h3 className="font-black uppercase text-yellow-500">Dados da empresa no rodapé</h3>
-            <p className="mt-1 text-xs text-zinc-500">O endereço abaixo é editável e será usado no orçamento/PDF.</p>
+            <h3 className="font-black uppercase text-yellow-500">Dados da empresa no rodapÃƒÂ©</h3>
+            <p className="mt-1 text-xs text-zinc-500">O endereÃƒÂ§o abaixo ÃƒÂ© editÃƒÂ¡vel e serÃƒÂ¡ usado no orÃƒÂ§amento/PDF.</p>
             <div className="mt-3">
-              <Campo titulo="Endereço da CHOQUESEG" valor={enderecoEmpresa} aoAlterar={setEnderecoEmpresa} />
+              <Campo titulo="EndereÃƒÂ§o da CHOQUESEG" valor={enderecoEmpresa} aoAlterar={setEnderecoEmpresa} />
             </div>
           </section>
 
           <section className="rounded-2xl border border-zinc-700 p-3 md:p-4">
-            <h3 className="font-black uppercase text-yellow-500">Tipo de serviço e composição</h3>
+            <h3 className="font-black uppercase text-yellow-500">Tipo de serviÃƒÂ§o e composiÃƒÂ§ÃƒÂ£o</h3>
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label>
-                <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Serviço específico</span>
+                <span className="mb-1 block text-sm font-black uppercase text-zinc-500">ServiÃƒÂ§o especÃƒÂ­fico</span>
                 <select
                   value={subservico}
                   onChange={(e) => {
@@ -977,14 +995,14 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                     setProdutoSelecionadoId("");
                     setItens([novoItem()]);
                   }}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white"
                 >
                   {SUBSERVICOS[tipo].map((item) => <option key={item}>{item}</option>)}
                 </select>
               </label>
 
               <label>
-                <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Composição do orçamento</span>
+                <span className="mb-1 block text-sm font-black uppercase text-zinc-500">ComposiÃƒÂ§ÃƒÂ£o do orÃƒÂ§amento</span>
                 <select
                   value={modoComposicao}
                   onChange={(e) => {
@@ -992,25 +1010,25 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                     setProdutoSelecionadoId("");
                     setItens([novoItem()]);
                   }}
-                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white"
                 >
-                  <option value="material-instalacao">Material + instalação</option>
-                  <option value="somente-instalacao">Somente instalação / mão de obra</option>
+                  <option value="material-instalacao">Material + instalaÃƒÂ§ÃƒÂ£o</option>
+                  <option value="somente-instalacao">Somente instalaÃƒÂ§ÃƒÂ£o / mÃƒÂ£o de obra</option>
                   <option value="somente-material">Somente material</option>
                 </select>
               </label>
             </div>
 
             <label className="mt-3 block">
-              <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Buscar material / modelo / marca</span>
+              <span className="mb-1 block text-sm font-black uppercase text-zinc-500">Buscar material / modelo / marca</span>
               <input
                 value={buscaProduto}
                 onChange={(e) => {
                   setBuscaProduto(e.target.value);
                   setProdutoSelecionadoId("");
                 }}
-                placeholder="Ex.: FD 1000, Rossi Nitro, PPA JetFlex, câmera IP..."
-                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400"
+                placeholder="Ex.: FD 1000, Rossi Nitro, PPA JetFlex, cÃƒÂ¢mera IP..."
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white outline-none focus:border-yellow-400"
               />
               {buscaProduto.trim() && (
                 <span className="mt-2 block text-xs font-bold text-zinc-400">
@@ -1024,13 +1042,13 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
 
 
           <section className="rounded-2xl border border-zinc-700 p-3 md:p-4">
-            <div className="mb-3"><h3 className="font-black uppercase text-yellow-500">Itens do orçamento</h3><p className="text-xs text-zinc-500">Escolha um produto cadastrado no catálogo ou digite um item manual.</p>{carregandoProdutos && <p className="mt-1 text-xs font-bold text-yellow-400">Carregando produtos da nuvem...</p>}</div>
+            <div className="mb-3"><h3 className="font-black uppercase text-yellow-500">Itens do orÃƒÂ§amento</h3><p className="text-xs text-zinc-500">Escolha um produto cadastrado no catÃƒÂ¡logo ou digite um item manual.</p>{carregandoProdutos && <p className="mt-1 text-xs font-bold text-yellow-400">Carregando produtos da nuvem...</p>}</div>
 
             <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-400/5 p-3">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="text-sm font-black uppercase text-white">Catálogo do segmento: {segmentoDoTipo(tipo)}</p>
-                  <p className="mt-1 text-xs text-zinc-500">Os equipamentos pré-cadastrados continuam disponíveis. Você também pode cadastrar novos ou excluir um item cadastrado incorretamente.</p>
+                  <p className="text-sm font-black uppercase text-white">CatÃƒÂ¡logo do segmento: {segmentoDoTipo(tipo)}</p>
+                  <p className="mt-1 text-xs text-zinc-500">Os equipamentos prÃƒÂ©-cadastrados continuam disponÃƒÂ­veis. VocÃƒÂª tambÃƒÂ©m pode cadastrar novos ou excluir um item cadastrado incorretamente.</p>
                 </div>
                 <button
                   type="button"
@@ -1050,7 +1068,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                   <option value="">Selecione um produto para gerenciar/excluir</option>
                   {produtosCategoria.map((produto) => (
                     <option key={produto.id} value={produto.id}>
-                      {produto.nome}{produto.fabricante ? ` — ${produto.fabricante}` : ""}{produto.modelo ? ` — ${produto.modelo}` : ""}
+                      {produto.nome}{produto.fabricante ? ` Ã¢â‚¬â€ ${produto.fabricante}` : ""}{produto.modelo ? ` Ã¢â‚¬â€ ${produto.modelo}` : ""}
                     </option>
                   ))}
                 </select>
@@ -1061,7 +1079,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                   disabled={!produtoParaExcluirId || excluindoProduto}
                   className="rounded-lg border border-red-500/60 px-4 py-3 text-sm font-black uppercase text-red-400 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {excluindoProduto ? "Excluindo..." : "🗑 Excluir produto"}
+                  {excluindoProduto ? "Excluindo..." : "Ã°Å¸â€”â€˜ Excluir produto"}
                 </button>
               </div>
             </div>
@@ -1070,26 +1088,26 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               {itens.map((item, indice) => (
                 <div key={item.id} className="rounded-xl border border-zinc-700 bg-zinc-950 p-3">
                   <div className="mb-2 grid gap-2 md:grid-cols-[220px_minmax(0,1fr)]">
-                    <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Material / serviço pré-cadastrado</span><select value={item.produtoId} onChange={(e) => selecionarProduto(item.id, e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-sm text-white outline-none focus:border-yellow-400"><option value="">Item manual</option>{produtosCategoria.map((produto) => <option key={produto.id} value={produto.id}>{produto.nome}{produto.fabricante ? ` — ${produto.fabricante}` : ""}{produto.modelo ? ` — ${produto.modelo}` : ""}</option>)}</select></label>
-                    <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Descrição</span><input value={item.descricao} onChange={(e) => atualizarItem(item.id, "descricao", e.target.value)} placeholder={`Item ${indice + 1}`} className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" /></label>
+                    <label><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Material / serviÃƒÂ§o prÃƒÂ©-cadastrado</span><select value={item.produtoId} onChange={(e) => selecionarProduto(item.id, e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-3 text-base text-white outline-none focus:border-yellow-400"><option value="">Item manual</option>{produtosCategoria.map((produto) => <option key={produto.id} value={produto.id}>{produto.nome}{produto.fabricante ? ` Ã¢â‚¬â€ ${produto.fabricante}` : ""}{produto.modelo ? ` Ã¢â‚¬â€ ${produto.modelo}` : ""}</option>)}</select></label>
+                    <label><span className="mb-1 block text-xs font-black uppercase text-zinc-500">DescriÃƒÂ§ÃƒÂ£o</span><input value={item.descricao} onChange={(e) => atualizarItem(item.id, "descricao", e.target.value)} placeholder={`Item ${indice + 1}`} className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-2 text-sm text-white outline-none focus:border-yellow-400" /></label>
                   </div>
                   <div className="grid grid-cols-2 gap-2 md:grid-cols-[minmax(110px,1.05fr)_minmax(100px,.9fr)_minmax(70px,.6fr)_minmax(120px,1fr)_minmax(120px,1fr)_42px] md:items-end">
                     <label>
-                      <span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Tipo</span>
+                      <span className="mb-1 block text-xs font-black uppercase text-zinc-500">Tipo</span>
                       <select
                         value={item.natureza}
                         onChange={(e) => atualizarItem(item.id, "natureza", e.target.value)}
-                        className="w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-sm text-white"
+                        className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-3 text-base text-white"
                       >
                         <option value="material">Material</option>
-                        <option value="mao_obra">Mão de obra</option>
+                        <option value="mao_obra">MÃƒÂ£o de obra</option>
                       </select>
                     </label>
-                    <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Unidade</span><select value={item.unidade} onChange={(e) => atualizarItem(item.id, "unidade", e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-sm text-white"><option>Unidade</option><option>Metro</option><option>Rolo</option><option>Caixa</option><option>Kit</option><option>Par</option><option>Serviço</option></select></label>
+                    <label><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Unidade</span><select value={item.unidade} onChange={(e) => atualizarItem(item.id, "unidade", e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-3 text-base text-white"><option>Unidade</option><option>Metro</option><option>Rolo</option><option>Caixa</option><option>Kit</option><option>Par</option><option>ServiÃƒÂ§o</option></select></label>
                     <CampoMini titulo="Qtd." tipo="number" valor={String(item.quantidade)} aoAlterar={(v) => atualizarItem(item.id, "quantidade", v)} />
-                    <CampoMini titulo="Valor unitário" tipo="number" valor={String(item.valorUnitario)} aoAlterar={(v) => atualizarItem(item.id, "valorUnitario", v)} />
-                    <div><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">Total</span><div className="rounded-lg border border-zinc-700 bg-black px-3 py-2 text-right text-sm font-black text-yellow-400">{moeda(item.quantidade * item.valorUnitario)}</div></div>
-                    <button type="button" onClick={() => removerItem(item.id)} className="h-10 rounded-lg border border-red-500/50 text-red-400" title="Remover">×</button>
+                    <CampoMini titulo="Valor unitÃƒÂ¡rio" tipo="number" valor={String(item.valorUnitario)} aoAlterar={(v) => atualizarItem(item.id, "valorUnitario", v)} />
+                    <div><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Total</span><div className="rounded-lg border border-zinc-700 bg-black px-3 py-2 text-right text-sm font-black text-yellow-400">{moeda(item.quantidade * item.valorUnitario)}</div></div>
+                    <button type="button" onClick={() => removerItem(item.id)} className="h-10 rounded-lg border border-red-500/50 text-red-400" title="Remover">Ãƒâ€”</button>
                   </div>
                 </div>
               ))}
@@ -1098,14 +1116,14 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
           </section>
 
           <div className="grid gap-3 md:grid-cols-[1fr_170px_150px] md:items-end">
-            <label><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Observações</span><textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={4} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400" placeholder="Prazo, condições e observações..." /></label>
-            <label><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Tipo de desconto</span><select value={tipoDesconto} onChange={(e) => setTipoDesconto(e.target.value as "valor" | "percentual")} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"><option value="valor">Valor (R$)</option><option value="percentual">Percentual (%)</option></select></label>
+            <label><span className="mb-1 block text-sm font-black uppercase text-zinc-500">ObservaÃƒÂ§ÃƒÂµes</span><textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={4} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white outline-none focus:border-yellow-400" placeholder="Prazo, condiÃƒÂ§ÃƒÂµes e observaÃƒÂ§ÃƒÂµes..." /></label>
+            <label><span className="mb-1 block text-sm font-black uppercase text-zinc-500">Tipo de desconto</span><select value={tipoDesconto} onChange={(e) => setTipoDesconto(e.target.value as "valor" | "percentual")} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white"><option value="valor">Valor (R$)</option><option value="percentual">Percentual (%)</option></select></label>
             <Campo titulo="Desconto" valor={String(desconto)} aoAlterar={(v) => setDesconto(Number(v) || 0)} tipo="number" />
           </div>
 
           <div className="grid gap-3 rounded-2xl border border-yellow-400/30 bg-yellow-400/5 p-4 sm:grid-cols-2 lg:grid-cols-4">
             <Resumo titulo="Materiais" valor={moeda(subtotalMateriais)} />
-            <Resumo titulo="Mão de obra" valor={moeda(subtotalMaoObra)} />
+            <Resumo titulo="MÃƒÂ£o de obra" valor={moeda(subtotalMaoObra)} />
             <Resumo titulo="Desconto" valor={`- ${moeda(valorDesconto)}`} />
             <Resumo titulo="Total" valor={moeda(total)} destaque />
           </div>
@@ -1118,17 +1136,17 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               aria-expanded={mensagemAberta}
             >
               <div>
-                <h3 className="font-black uppercase text-yellow-500">💬 Mensagem padrão de envio</h3>
+                <h3 className="font-black uppercase text-yellow-500">Ã°Å¸â€™Â¬ Mensagem padrÃƒÂ£o de envio</h3>
                 <p className="mt-1 text-xs text-zinc-500">
                   {mensagemAberta
                     ? "Edite, confira e salve sua mensagem."
                     : mensagemPadrao.trim()
-                      ? "Mensagem padrão configurada ✓ — toque para abrir"
+                      ? "Mensagem padrÃƒÂ£o configurada Ã¢Å“â€œ Ã¢â‚¬â€ toque para abrir"
                       : "Toque para configurar a mensagem"}
                 </p>
               </div>
               <span className="shrink-0 text-xl font-black text-yellow-400">
-                {mensagemAberta ? "▲" : "▼"}
+                {mensagemAberta ? "Ã¢â€“Â²" : "Ã¢â€“Â¼"}
               </span>
             </button>
 
@@ -1136,7 +1154,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               <div className="border-t border-zinc-700 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="max-w-2xl text-xs text-zinc-500">
-                    Escreva uma vez do seu jeito e salve. Nome, serviço, itens e valores serão atualizados automaticamente.
+                    Escreva uma vez do seu jeito e salve. Nome, serviÃƒÂ§o, itens e valores serÃƒÂ£o atualizados automaticamente.
                   </p>
                   <button
                     type="button"
@@ -1144,7 +1162,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                     disabled={salvandoMensagem}
                     className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black uppercase text-black disabled:opacity-50"
                   >
-                    {salvandoMensagem ? "Salvando..." : "💾 Salvar mensagem"}
+                    {salvandoMensagem ? "Salvando..." : "Ã°Å¸â€™Â¾ Salvar mensagem"}
                   </button>
                 </div>
 
@@ -1156,12 +1174,12 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                 />
 
                 <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-                  Variáveis: {"{primeiro_nome}"}, {"{nome_cliente}"}, {"{tipo_servico}"}, {"{itens}"}, {"{materiais}"}, {"{mao_obra}"}, {"{subtotal}"}, {"{desconto}"} e {"{valor_total}"}.
+                  VariÃƒÂ¡veis: {"{primeiro_nome}"}, {"{nome_cliente}"}, {"{tipo_servico}"}, {"{itens}"}, {"{materiais}"}, {"{mao_obra}"}, {"{subtotal}"}, {"{desconto}"} e {"{valor_total}"}.
                 </p>
 
                 <details className="mt-4 rounded-xl border border-zinc-700 bg-black">
                   <summary className="cursor-pointer p-4 text-xs font-black uppercase text-zinc-400">
-                    👁️ Ver prévia da mensagem
+                    Ã°Å¸â€˜ÂÃ¯Â¸Â Ver prÃƒÂ©via da mensagem
                   </summary>
                   <pre className="whitespace-pre-wrap border-t border-zinc-800 p-4 font-sans text-sm leading-relaxed text-zinc-200">
                     {montarMensagemDoModelo()}
@@ -1173,7 +1191,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                   onClick={() => setMensagemAberta(false)}
                   className="mt-4 w-full rounded-xl border border-zinc-700 px-4 py-3 text-sm font-black uppercase text-zinc-300 md:w-auto"
                 >
-                  ▲ Fechar mensagem
+                  Ã¢â€“Â² Fechar mensagem
                 </button>
               </div>
             )}
@@ -1186,7 +1204,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               disabled={salvandoCliente}
               className="rounded-xl border border-blue-500 px-4 py-4 font-black uppercase text-blue-400 disabled:opacity-50"
             >
-              👁️ Visualizar PDF
+              Ã°Å¸â€˜ÂÃ¯Â¸Â Visualizar PDF
             </button>
 
             <button
@@ -1195,7 +1213,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               disabled={salvandoCliente}
               className="rounded-xl border border-yellow-400 px-4 py-4 font-black uppercase text-yellow-500 disabled:opacity-50"
             >
-              🧾 Imprimir / salvar PDF
+              Ã°Å¸Â§Â¾ Imprimir / salvar PDF
             </button>
 
             <button
@@ -1204,7 +1222,7 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               disabled={salvandoCliente}
               className="rounded-xl bg-green-600 px-4 py-4 font-black uppercase text-white disabled:opacity-50"
             >
-              📲 Enviar ao cliente
+              Ã°Å¸â€œÂ² Enviar ao cliente
             </button>
           </div>
         </div>
@@ -1215,49 +1233,52 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800 p-4">
                 <div>
                   <h2 className="text-lg font-black uppercase text-yellow-400">Visualizar PDF</h2>
-                  <p className="text-xs text-zinc-400">Este é o mesmo PDF usado para imprimir, baixar ou enviar.</p>
+                  <p className="text-xs text-zinc-400">Este ÃƒÂ© o mesmo PDF usado para imprimir, baixar ou enviar.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setPreviewAberto(false)}
                   className="rounded-xl border border-zinc-700 px-4 py-2 font-black text-white"
                 >
-                  ✕ Fechar
+                  Ã¢Å“â€¢ Fechar
                 </button>
               </div>
 
-              <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_390px]">
-                <div className="min-h-[50vh] bg-zinc-800 p-2 md:p-4">
+              <div className="min-h-0 flex-1 overflow-y-auto lg:grid lg:grid-cols-[minmax(0,1fr)_420px] lg:overflow-hidden">
+                <div className="h-[42vh] min-h-[320px] bg-zinc-800 p-2 md:p-4 lg:h-auto lg:min-h-0">
                   {previewPdfUrl && (
                     <iframe
-                      title="Pré-visualização do orçamento"
+                      title="PrÃƒÂ©-visualizaÃƒÂ§ÃƒÂ£o do orÃƒÂ§amento"
                       src={previewPdfUrl}
-                      className="h-full min-h-[55vh] w-full rounded-lg bg-white"
+                      className="h-full w-full rounded-lg bg-white"
                     />
                   )}
                 </div>
 
-                <aside className="overflow-y-auto border-l border-zinc-800 bg-zinc-950 p-4">
+                <aside className="border-t border-zinc-800 bg-zinc-950 p-4 lg:overflow-y-auto lg:border-l lg:border-t-0">
                   <h3 className="font-black uppercase text-white">Mensagem deste envio</h3>
                   <p className="mt-1 text-xs text-zinc-500">
-                    Você pode alterar aqui sem modificar a mensagem padrão salva.
+                    VocÃƒÂª pode alterar aqui sem modificar a mensagem padrÃƒÂ£o salva.
                   </p>
                   <textarea
                     value={mensagemEnvio}
                     onChange={(e) => setMensagemEnvio(e.target.value)}
                     rows={16}
-                    className="mt-4 w-full rounded-xl border border-zinc-700 bg-black p-4 text-sm leading-relaxed text-white outline-none focus:border-yellow-400"
+                    className="mt-4 w-full rounded-xl border border-zinc-700 bg-black p-4 text-base leading-relaxed text-white outline-none focus:border-yellow-400"
                   />
 
                   <div className="mt-4 grid gap-3">
                     <button type="button" onClick={imprimirPdfVisualizado} className="rounded-xl bg-white px-4 py-3 font-black uppercase text-black">
-                      🖨️ Imprimir
+                      Ã°Å¸â€“Â¨Ã¯Â¸Â Imprimir
                     </button>
                     <button type="button" onClick={baixarPdfVisualizado} className="rounded-xl border border-yellow-400 px-4 py-3 font-black uppercase text-yellow-300">
-                      ⬇️ Baixar PDF
+                      Ã¢Â¬â€¡Ã¯Â¸Â Baixar PDF
+                    </button>
+                    <button type="button" onClick={() => void copiarMensagemEnvio()} className="rounded-xl border border-zinc-600 px-4 py-3 text-base font-black uppercase text-zinc-200">
+                      Ã°Å¸â€œâ€¹ Copiar mensagem
                     </button>
                     <button type="button" onClick={() => void enviarPdfVisualizado()} className="rounded-xl bg-green-600 px-4 py-4 text-base font-black uppercase text-white">
-                      📲 Enviar ao cliente
+                      Ã°Å¸â€œÂ² Enviar PDF + mensagem
                     </button>
                   </div>
                 </aside>
@@ -1274,38 +1295,38 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>Composiç�
                   <h3 className="text-lg font-black uppercase text-yellow-400">Cadastrar novo produto</h3>
                   <p className="mt-1 text-sm text-zinc-500">Segmento definido automaticamente: {segmentoDoTipo(tipo)}.</p>
                 </div>
-                <button type="button" onClick={() => setCadastroProdutoAberto(false)} className="rounded-lg border border-zinc-700 px-3 py-2 font-black text-white">✕</button>
+                <button type="button" onClick={() => setCadastroProdutoAberto(false)} className="rounded-lg border border-zinc-700 px-3 py-2 font-black text-white">Ã¢Å“â€¢</button>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-2">
                 <Campo titulo="Nome do produto" valor={novoProdutoNome} aoAlterar={setNovoProdutoNome} />
                 <Campo titulo="Fabricante / marca" valor={novoProdutoFabricante} aoAlterar={setNovoProdutoFabricante} />
                 <Campo titulo="Modelo" valor={novoProdutoModelo} aoAlterar={setNovoProdutoModelo} />
-                <label className="block"><span className="mb-1 block text-xs font-black uppercase text-zinc-500">Unidade</span><select value={novoProdutoUnidade} onChange={(e) => setNovoProdutoUnidade(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white"><option>Unidade</option><option>Metro</option><option>Rolo</option><option>Caixa</option><option>Kit</option><option>Par</option></select></label>
-                <Campo titulo="Custo unitário" valor={novoProdutoCusto} aoAlterar={setNovoProdutoCusto} tipo="number" />
+                <label className="block"><span className="mb-1 block text-sm font-black uppercase text-zinc-500">Unidade</span><select value={novoProdutoUnidade} onChange={(e) => setNovoProdutoUnidade(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white"><option>Unidade</option><option>Metro</option><option>Rolo</option><option>Caixa</option><option>Kit</option><option>Par</option></select></label>
+                <Campo titulo="Custo unitÃƒÂ¡rio" valor={novoProdutoCusto} aoAlterar={setNovoProdutoCusto} tipo="number" />
                 <Campo titulo="Valor de venda" valor={novoProdutoVenda} aoAlterar={setNovoProdutoVenda} tipo="number" />
               </div>
 
               <div className="mt-5 grid gap-2 sm:grid-cols-2">
                 <button type="button" onClick={() => setCadastroProdutoAberto(false)} className="rounded-xl border border-zinc-700 px-4 py-3 font-black uppercase text-zinc-300">Cancelar</button>
-                <button type="button" disabled={salvandoProduto} onClick={() => void cadastrarNovoProdutoRapido()} className="rounded-xl bg-yellow-400 px-4 py-3 font-black uppercase text-black disabled:opacity-50">{salvandoProduto ? "Salvando..." : "Salvar no catálogo"}</button>
+                <button type="button" disabled={salvandoProduto} onClick={() => void cadastrarNovoProdutoRapido()} className="rounded-xl bg-yellow-400 px-4 py-3 font-black uppercase text-black disabled:opacity-50">{salvandoProduto ? "Salvando..." : "Salvar no catÃƒÂ¡logo"}</button>
               </div>
             </div>
           </div>
         )}
 
-        <footer className="flex w-full flex-wrap items-center gap-x-5 gap-y-2 border-t-2 border-yellow-400 bg-zinc-950 px-4 py-4 text-sm font-bold text-zinc-200 md:px-6"><img src="/imagens/logo/brasao-choqueseg.png" alt="CHOQUESEG" className="h-11 w-11 object-contain" /><strong className="text-base font-black text-yellow-400">CHOQUESEG</strong><span>☎ {TELEFONE_EMPRESA}</span><span>◎ {INSTAGRAM_EMPRESA}</span><span>📍 {enderecoEmpresa}</span></footer>
+        <footer className="flex w-full flex-wrap items-center gap-x-5 gap-y-2 border-t-2 border-yellow-400 bg-zinc-950 px-4 py-4 text-sm font-bold text-zinc-200 md:px-6"><img src="/imagens/logo/brasao-choqueseg.png" alt="CHOQUESEG" className="h-11 w-11 object-contain" /><strong className="text-base font-black text-yellow-400">CHOQUESEG</strong><span>Ã¢ËœÅ½ {TELEFONE_EMPRESA}</span><span>Ã¢â€”Å½ {INSTAGRAM_EMPRESA}</span><span>Ã°Å¸â€œÂ {enderecoEmpresa}</span></footer>
       </div>
     </section>
   );
 }
 
 function Campo({ titulo, valor, aoAlterar, tipo = "text" }: { titulo: string; valor: string; aoAlterar: (valor: string) => void; tipo?: string }) {
-  return <label className="block"><span className="mb-1 block text-xs font-black uppercase text-zinc-500">{titulo}</span><input type={tipo} value={valor} onChange={(e) => aoAlterar(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-white outline-none focus:border-yellow-400" /></label>;
+  return <label className="block"><span className="mb-1 block text-sm font-black uppercase text-zinc-500">{titulo}</span><input type={tipo} value={valor} onChange={(e) => aoAlterar(e.target.value)} className="w-full rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-3 text-base text-white outline-none focus:border-yellow-400" /></label>;
 }
 
 function CampoMini({ titulo, valor, aoAlterar, tipo = "text" }: { titulo: string; valor: string; aoAlterar: (valor: string) => void; tipo?: string }) {
-  return <label><span className="mb-1 block text-[10px] font-black uppercase text-zinc-500">{titulo}</span><input type={tipo} min={tipo === "number" ? 0 : undefined} step={tipo === "number" ? "0.01" : undefined} value={valor} onChange={(e) => aoAlterar(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-2 py-2 text-sm text-white outline-none focus:border-yellow-400" /></label>;
+  return <label><span className="mb-1 block text-xs font-black uppercase text-zinc-500">{titulo}</span><input type={tipo} min={tipo === "number" ? 0 : undefined} step={tipo === "number" ? "0.01" : undefined} value={valor} onChange={(e) => aoAlterar(e.target.value)} className="w-full rounded-lg border border-zinc-700 bg-black px-3 py-3 text-base text-white outline-none focus:border-yellow-400" /></label>;
 }
 
 function Resumo({ titulo, valor, destaque = false }: { titulo: string; valor: string; destaque?: boolean }) {
