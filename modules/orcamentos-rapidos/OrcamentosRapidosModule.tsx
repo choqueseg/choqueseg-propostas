@@ -704,17 +704,49 @@ ${modoComposicao === "somente-instalacao" ? `<div class="obs"><strong>ComposiÃ�
   }
 
   async function visualizarPDFOrcamento() {
+    const dispositivoMovel =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(max-width: 1180px)").matches ||
+        /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+
+    const novaAba = dispositivoMovel ? window.open("", "_blank") : null;
+
+    if (novaAba) {
+      novaAba.document.title = "Gerando PDF - CHOQUESEG";
+      novaAba.document.body.innerHTML =
+        '<div style="font-family:Arial,sans-serif;padding:30px;text-align:center"><h2>CHOQUESEG</h2><p>Gerando PDF...</p></div>';
+    }
+
     try {
       const blob = await criarPDFOrcamento();
-      if (previewPdfUrl) URL.revokeObjectURL(previewPdfUrl);
+
+      if (previewPdfUrl) {
+        URL.revokeObjectURL(previewPdfUrl);
+      }
+
       const url = URL.createObjectURL(blob);
+
       setPreviewPdfBlob(blob);
       setPreviewPdfUrl(url);
       setMensagemEnvio(montarMensagemDoModelo());
+
+      if (dispositivoMovel) {
+        if (novaAba) {
+          novaAba.location.href = url;
+        } else {
+          window.open(url, "_blank");
+        }
+        return;
+      }
+
       setPreviewAberto(true);
     } catch (e) {
+      if (novaAba) {
+        novaAba.close();
+      }
+
       console.error("Erro ao visualizar PDF:", e);
-      alert(e instanceof Error ? e.message : "NÃƒÂ£o foi possÃƒÂ­vel visualizar o PDF.");
+      alert(e instanceof Error ? e.message : "Nao foi possivel visualizar o PDF.");
     }
   }
 
